@@ -279,6 +279,9 @@ ARCHITECTURE struct OF emu IS
   SIGNAL bdrdy,busrq,busak,halt,intrm : std_logic;
   SIGNAL pa_i,pb_i,pa_o,pb_o : uv8;
   SIGNAL pa_en,pb_en : std_logic;
+  SIGNAL map_mem : std_logic_vector(3 DOWNTO 0);
+  SIGNAL map_reset : std_logic;
+  SIGNAL map_cpt : uint4;
   
   -- OVO -----------------------------------------
   FUNCTION CC(i : character) RETURN unsigned IS
@@ -670,6 +673,22 @@ BEGIN
     END CASE;
   END PROCESS;
 
+  Map_Change:PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      map_mem<=status(7 DOWNTO 4);
+      IF map_mem/=status(7 DOWNTO 4) THEN
+        map_cpt<=0;
+      END IF;
+      IF map_cpt<15 THEN
+        map_cpt<=map_cpt+1;
+        map_reset<='1';        
+      ELSE
+        map_reset<='0';
+      END IF;
+    END IF;
+  END PROCESS;
+  
   ----------------------------------------------------------
   rom_dr<=carth(to_integer(cad(14 DOWNTO 0))) &
           cartl(to_integer(cad(14 DOWNTO 0))) WHEN rising_edge(clksys);
@@ -867,7 +886,6 @@ BEGIN
   video_arx <= x"04" WHEN status(3)='0' ELSE x"16";
   video_ary <= x"03" WHEN status(3)='0' ELSE x"09";
   
-  
   ----------------------------------------------------------
   sd_sck<='0';
   sd_mosi<='0';
@@ -937,22 +955,10 @@ BEGIN
 
       ce_pixel<=vga_ce;
       
-      --IF status(4)='1' THEN
-      --  ce_pixel<=vga_ce2;
-      --END IF;
-      
-      --IF status(5)='1' THEN
-      --  ce_pixel<=vga_ce3;
-      --END IF;
-      --IF status(5)='1' THEN
-      --  ce_pixel<=vga_ce4;
-      --END IF;
-      
     END IF;
   END PROCESS;
 
   clk_video<=clksys;
-  --ce_pixel<=vga_ce5;
   
   ovo_in0<='0' & pa_i(7 DOWNTO 4) &
             '0' & pa_i(3 DOWNTO 0) &
@@ -970,13 +976,11 @@ BEGIN
             "0000" & bdic(2) &
             "0000" & bdic(1) &
             "0000" & bdic(0) &
-
             CC(' ') &
             '0' & unsigned(joystick_analog_0(15 DOWNTO 12)) &
             '0' & unsigned(joystick_analog_0(11 DOWNTO 8)) &
             '0' & unsigned(joystick_analog_0(7 DOWNTO 4)) &
             '0' & unsigned(joystick_analog_0(3 DOWNTO 0)) &
-
             CS("   ") &
             "00" & unsigned(ps2_key_mem(10 DOWNTO 8)) &
             '0' & unsigned(ps2_key_mem(7 DOWNTO 4)) &
@@ -1011,11 +1015,10 @@ BEGIN
     '0' & hitbo(7 DOWNTO 4) &
     '0' & hitbo(3 DOWNTO 0) &
     CS("          ");
-
-            
+  
   ovo_ena<=status(2);
   
   ----------------------------------------------------------
-  reset_na<=NOT reset AND pll_locked AND NOT ioctl_download;
+  reset_na<=NOT reset AND pll_locked AND NOT ioctl_download AND NOT map_reset;
   
 END struct;
