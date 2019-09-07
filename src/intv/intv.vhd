@@ -129,7 +129,7 @@ ARCHITECTURE struct OF emu IS
     "Intellivision;;" &
     "-;" &
     "FS,ROMINT;" &
-    "O47,MAP,0,1,2,3,4,5,6,7,8,9;" &
+    "O47,MAP,Auto,0,1,2,3,4,5,6,7,8,9;" &
 --  "O0,Video standard,PAL,NTSC;" &
     "O3,Aspect ratio,4:3,16:9;" &
 --  "O46,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;" &
@@ -231,7 +231,7 @@ ARCHITECTURE struct OF emu IS
   SIGNAL status_menumask : std_logic_vector(15 DOWNTO 0):=x"0000";
   SIGNAL new_vmode       : std_logic :='0';
   
-  SIGNAL ioctl_download : std_logic;
+  SIGNAL ioctl_download,ioctl_download2 : std_logic;
   SIGNAL ioctl_index    : std_logic_vector(7 DOWNTO 0);
   SIGNAL ioctl_wr       : std_logic;
   SIGNAL ioctl_addr     : std_logic_vector(24 DOWNTO 0);
@@ -279,10 +279,9 @@ ARCHITECTURE struct OF emu IS
   SIGNAL bdrdy,busrq,busak,halt,intrm : std_logic;
   SIGNAL pa_i,pb_i,pa_o,pb_o : uv8;
   SIGNAL pa_en,pb_en : std_logic;
-  SIGNAL map_mem : std_logic_vector(3 DOWNTO 0);
   SIGNAL map_reset : std_logic;
   SIGNAL map_cpt : uint4;
-  
+
   -- OVO -----------------------------------------
   FUNCTION CC(i : character) RETURN unsigned IS
   BEGIN
@@ -347,6 +346,32 @@ ARCHITECTURE struct OF emu IS
   SIGNAL hits : uv64;
   SIGNAL hitbg,hitbo : uv8;
 
+  TYPE type_jmap IS RECORD
+    crc : uv32;
+    m   : uint4;
+  END RECORD;
+  TYPE arr_jmap IS ARRAY (natural RANGE <>) OF type_jmap;
+  CONSTANT MAPS : arr_jmap := (
+    (x"4CC46A04",1),(x"D5F038B6",1),(x"A3ACD160",1),(x"4422868E",1),
+    (x"C2063C08",1),(x"A12C27E1",1),
+    (x"515E1D7E",2),(x"0BF464C6",2),(x"3289C8BA",2),(x"16BFB8EB",2),
+    (x"6802B191",2),(x"13EE56F1",2),(x"FF83FF80",2),(x"2C5FD5FA",2),
+    (x"632F6ADF",2),(x"B745C1CA",2),(x"BB939881",2),(x"800B572F",2),
+    (x"32076E9D",2),(x"A95021FC",2),
+    (x"D1D352A0",3),
+    (x"3825C25B",4),
+    (x"4B23A757",5),(x"D8F99AA2",5),(x"159AF7F7",5),(x"A21C31C3",5),
+    (x"6E4E8EB4",5),
+    (x"D5363B8C",6),
+    (x"13FF363C",7),(x"C047D487",7),(x"5E6A8CD8",7),(x"E806AD91",7),
+    (x"C83EEA4C",8),
+    (x"CE8FC699",9),(x"095638C0",9));
+
+  SIGNAL crc,xcrc : uv32;
+  SIGNAL search,found : std_logic;
+  SIGNAL mapcpt : natural RANGE 0 TO MAPS'length+1;
+  SIGNAL smap,mmap,mmap2 : uint4;
+  
 BEGIN
 
   hps : hps_io
@@ -582,9 +607,8 @@ BEGIN
   --   $5000 - $5FFF = $F000   ;  4K to $F000 - $FFFF
   --   RAM $8800 - $8FFF = RAM 8
 
-  PROCESS(ad,status) IS
+  PROCESS(ad,mmap) IS
     VARIABLE aad : uv12;
-    VARIABLE mmap : uint4;
     FUNCTION sel(ad : uv15;
                  c  : boolean) RETURN unsigned IS
     BEGIN
@@ -595,7 +619,6 @@ BEGIN
   BEGIN
     aad:=ad(11 DOWNTO 0);
     selram<='0';
-    mmap:=to_integer(unsigned(status(7 DOWNTO 4)));
     
     CASE mmap IS
       WHEN 0 =>
@@ -676,8 +699,16 @@ BEGIN
   Map_Change:PROCESS(clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN
-      map_mem<=status(7 DOWNTO 4);
-      IF map_mem/=status(7 DOWNTO 4) THEN
+      
+      IF status(7 DOWNTO 4)="0000" THEN
+        mmap<=mux(found='1',smap,0);
+      ELSE
+        mmap<=to_integer(unsigned(status(7 DOWNTO 4)))-1;
+      END IF;
+      
+      mmap2<=mmap;
+      
+      IF mmap2/=mmap THEN
         map_cpt<=0;
       END IF;
       IF map_cpt<15 THEN
@@ -688,6 +719,88 @@ BEGIN
       END IF;
     END IF;
   END PROCESS;
+  
+  ----------------------------------------------------------
+  CRCCalc:PROCESS(clksys) IS
+    FUNCTION crc8 (
+      CONSTANT d   : IN unsigned(7 DOWNTO 0);
+      CONSTANT crc : IN unsigned(31 DOWNTO 0)) RETURN unsigned IS
+      VARIABLE co : unsigned(31 DOWNTO 0);
+      VARIABLE h  : unsigned(7 DOWNTO 0);
+    BEGIN
+      h(0):=d(0) XOR crc(31);
+      h(1):=d(1) XOR crc(30);
+      h(2):=d(2) XOR crc(29);
+      h(3):=d(3) XOR crc(28);
+      h(4):=d(4) XOR crc(27);
+      h(5):=d(5) XOR crc(26);
+      h(6):=d(6) XOR crc(25) XOR h(0);
+      h(7):=d(7) XOR crc(24) XOR h(1);
+      co(0) :=h(7);
+      co(1) :=h(6) XOR h(7);
+      co(2) :=h(5) XOR h(6) XOR h(7);
+      co(3) :=h(4) XOR h(5) XOR h(6);
+      co(4) :=h(3) XOR h(4) XOR h(5) XOR h(7);
+      co(5) :=h(2) XOR h(3) XOR h(4) XOR h(6) XOR h(7);
+      co(6) :=h(1) XOR h(2) XOR h(3) XOR h(5) XOR h(6);
+      co(7) :=h(0) XOR h(1) XOR h(2) XOR h(4) XOR h(5) XOR h(7);
+      co(8) := crc(0) XOR h(0) XOR h(1) XOR h(3) XOR h(4) XOR h(6) XOR h(7);
+      co(9) := crc(1) XOR h(0) XOR h(2) XOR h(3) XOR h(5) XOR h(6);
+      co(10):= crc(2) XOR h(1) XOR h(2) XOR h(4) XOR h(5) XOR h(7);
+      co(11):= crc(3) XOR h(0) XOR h(1) XOR h(3) XOR h(4) XOR h(6) XOR h(7);
+      co(12):= crc(4) XOR h(0) XOR h(2) XOR h(3) XOR h(5) XOR h(6) XOR h(7);
+      co(13):= crc(5) XOR h(1) XOR h(2) XOR h(4) XOR h(5) XOR h(6);
+      co(14):= crc(6) XOR h(0) XOR h(1) XOR h(3) XOR h(4) XOR h(5);
+      co(15):= crc(7) XOR h(0) XOR h(2) XOR h(3) XOR h(4);
+      co(16):= crc(8) XOR h(1) XOR h(2) XOR h(3) XOR h(7);
+      co(17):= crc(9) XOR h(0) XOR h(1) XOR h(2) XOR h(6);
+      co(18):=crc(10) XOR h(0) XOR h(1) XOR h(5);
+      co(19):=crc(11) XOR h(0) XOR h(4);
+      co(20):=crc(12) XOR h(3);
+      co(21):=crc(13) XOR h(2);
+      co(22):=crc(14) XOR h(1) XOR h(7);
+      co(23):=crc(15) XOR h(0) XOR h(6) XOR h(7);
+      co(24):=crc(16) XOR h(5) XOR h(6);
+      co(25):=crc(17) XOR h(4) XOR h(5);
+      co(26):=crc(18) XOR h(3) XOR h(4) XOR h(7);
+      co(27):=crc(19) XOR h(2) XOR h(3) XOR h(6);
+      co(28):=crc(20) XOR h(1) XOR h(2) XOR h(5);
+      co(29):=crc(21) XOR h(0) XOR h(1) XOR h(4);
+      co(30):=crc(22) XOR h(0) XOR h(3);
+      co(31):=crc(23) XOR h(2);
+      RETURN co;
+    END crc8;
+  BEGIN
+    IF rising_edge(clksys) THEN
+      IF ioctl_wr='1' THEN
+        crc<=crc8(unsigned(ioctl_dout),
+                  mux(to_integer(unsigned(ioctl_addr))=0,x"FFFFFFFF",crc));
+      END IF;
+      
+      FOR i IN 0 TO 31 LOOP
+        xcrc(i)<=NOT crc(31-i);
+      END LOOP;
+
+      ioctl_download2<=ioctl_download;
+      
+      IF search='0' THEN
+        IF ioctl_download='0' AND ioctl_download2='1' THEN
+          search<='1';
+          found<='0';
+        END IF;
+        mapcpt<=0;
+      ELSE
+        mapcpt<=mapcpt+1;
+        IF xcrc=MAPS(mapcpt).crc THEN
+          smap<=MAPS(mapcpt).m;
+          found<='1';
+        END IF;
+        IF mapcpt=MAPS'length THEN
+          search<='0';
+        END IF;
+      END IF;
+    END IF;
+  END PROCESS CRCCalc;
   
   ----------------------------------------------------------
   rom_dr<=carth(to_integer(cad(14 DOWNTO 0))) &
@@ -981,33 +1094,28 @@ BEGIN
             '0' & unsigned(joystick_analog_0(11 DOWNTO 8)) &
             '0' & unsigned(joystick_analog_0(7 DOWNTO 4)) &
             '0' & unsigned(joystick_analog_0(3 DOWNTO 0)) &
-            CS("   ") &
+            CS("  ") &
+            '0' & to_unsigned(mmap,4) &
+            CC(' ') &
             "00" & unsigned(ps2_key_mem(10 DOWNTO 8)) &
             '0' & unsigned(ps2_key_mem(7 DOWNTO 4)) &
             '0' & unsigned(ps2_key_mem(3 DOWNTO 0)) &
             CC(' ') &
             "0000" & bdrdy &
             "0000" & busrq &
-            "0000" & busak &
-            CS(" ");
-
+            "0000" & busak;
+            --CS(" ");
+  
   ovo_in1<=
-    '0' & hits(32+31 DOWNTO 28+32) &
-    '0' & hits(32+27 DOWNTO 24+32) &
-    '0' & hits(32+23 DOWNTO 20+32) &
-    '0' & hits(32+19 DOWNTO 16+32) &
-    '0' & hits(32+15 DOWNTO 12+32) &
-    '0' & hits(32+11 DOWNTO 8+32) &
-    '0' & hits(32+7 DOWNTO 4+32) &
-    '0' & hits(32+3 DOWNTO 0+32) &
-    '0' & hits(31 DOWNTO 28) &
-    '0' & hits(27 DOWNTO 24) &
-    '0' & hits(23 DOWNTO 20) &
-    '0' & hits(19 DOWNTO 16) &
-    '0' & hits(15 DOWNTO 12) &
-    '0' & hits(11 DOWNTO 8) &
-    '0' & hits(7 DOWNTO 4) &
-    '0' & hits(3 DOWNTO 0) &
+    CS("        ") &
+    '0' & xcrc(31 DOWNTO 28) &
+    '0' & xcrc(27 DOWNTO 24) &
+    '0' & xcrc(23 DOWNTO 20) &
+    '0' & xcrc(19 DOWNTO 16) &
+    '0' & xcrc(15 DOWNTO 12) &
+    '0' & xcrc(11 DOWNTO 8) &
+    '0' & xcrc(7 DOWNTO 4) &
+    '0' & xcrc(3 DOWNTO 0) &
     CC(' ') &
     '0' & hitbg(7 DOWNTO 4) &
     '0' & hitbg(3 DOWNTO 0) &
