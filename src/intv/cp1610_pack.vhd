@@ -106,7 +106,7 @@ PACKAGE BODY cp1610_pack IS
         vt:=('0' & x"0000") + ('0' & NOT vi) + 1;
         vo:=vt(15 DOWNTO 0);
         szoco.c:=vt(16);
-        szoco.o:=(vi(15) XOR vt(15)) AND vi(15);
+        szoco.o:=vt(15) AND vi(15);
         szoco.z:=to_std_logic(vt(15 DOWNTO 0)=x"0000");
         szoco.s:=vt(15);
         
@@ -114,7 +114,7 @@ PACKAGE BODY cp1610_pack IS
         vt:=('0' & vi) + ("0" & szoci.c);
         vo:=vt(15 DOWNTO 0);
         szoco.c:=vt(16);
-        szoco.o:=(vi(15) XOR vt(15)) AND NOT (vi(15));
+        szoco.o:=(vi(15) XOR vt(15)) AND NOT vi(15);
         szoco.z:=to_std_logic(vt(15 DOWNTO 0)=x"0000");
         szoco.s:=vt(15);
         
@@ -164,12 +164,14 @@ PACKAGE BODY cp1610_pack IS
           szoco.z:=to_std_logic(vi1(15 DOWNTO 0)=x"0000");
           szoco.s:=vi1(15);
         END IF;
+        
       WHEN "010" => -- MVI
         vo:=vi1;
         IF reg THEN
           szoco.z:=to_std_logic(vi1(15 DOWNTO 0)=x"0000");
           szoco.s:=vi1(15);
         END IF;
+        
       WHEN "011" => -- ADD
         vt:=('0' & vi2) + ('0' & vi1);
         vo:=vt(15 DOWNTO 0);
@@ -331,7 +333,7 @@ PACKAGE BODY cp1610_pack IS
       WHEN "00111" => -- Branch if unequal sign and carry. C^S=1
         RETURN (szoc.c XOR szoc.s)='1';
       WHEN "01111" => -- Branch if equal sign and carry. C^S=0
-        RETURN (szoc.c XOR szoc.s)='1';
+        RETURN (szoc.c XOR szoc.s)='0';
       WHEN OTHERS  => -- Branch on external condition true
         RETURN ebc(to_integer(op(3 DOWNTO 0)))='1';
     END CASE;
