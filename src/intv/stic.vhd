@@ -70,7 +70,7 @@ ENTITY stic IS
     
     -- Executive ROM
     --exec_dr : IN uv10;
-
+    
     hits  : OUT uv64;
     hitbg : OUT uv8;
     hitbo : OUT uv8;
@@ -382,7 +382,7 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL cscpt : uint2;
 
   SIGNAL cstack : arr_uv4(0 TO 3);
-  SIGNAL cstack_cpt : uint2;
+  SIGNAL cstack_cpt,cstack_cpt_mem : uint2;
   
   SIGNAL coll,collsetbg,collsetborder : uv8;
   SIGNAL collset : arr_uv8(0 TO 7);
@@ -578,7 +578,7 @@ BEGIN
         dr<=x"00" & pr_grom;
         
       -- GRAM --------------------------
-      ELSIF padrs >=16#3800# AND padrs <=16#39FF# THEN
+      ELSIF (padrs >=16#3800# AND padrs <=16#3FFF#) THEN
 --      ELSIF padrs MOD 16384>=16#3800# AND padrs MOD 16384<=16#39FF# THEN
         dr<=x"00" & pr_gram;
         pwr_gram<=pwr;
@@ -602,17 +602,6 @@ BEGIN
         dr<=cart_dr;
         cart_wr<=pwr;
         
-      --ELSIF padrs>=16#5000# AND padrs<=16#6FFF# THEN -- 8kw
-      --  dr<=cart_dr;
-      --  cart_wr<=pwr;
-      --ELSIF padrs>=16#D000# AND padrs<=16#DFFF# THEN -- 8kw
-      --  dr<=cart_dr;
-      --  cart_wr<=pwr;
-      --ELSIF padrs>=16#F000# AND padrs<=16#FFFF# THEN -- 8kw
-      --  dr<=cart_dr;
-      --  cart_wr<=pwr;
-      --ELSE
-      --  dr<=x"FFFF";
       END IF;
       
       ----------------------------------
@@ -777,7 +766,7 @@ BEGIN
       collset<=(x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00");
       collsetbg<=x"00";
       collsetborder<=x"00";
-          
+      
     ELSIF rising_edge(clk) THEN
       
       ----------------------------------
@@ -802,6 +791,7 @@ BEGIN
             ELSE
               vpos<=0;
               cstack_cpt<=0;
+              cstack_cpt_mem<=0;
             END IF;
           END IF;
           over.a <='0';
@@ -810,10 +800,7 @@ BEGIN
             vpos = 16 + VSTART + 8*12*2 THEN
             intrm_i<='1';
           END IF;
-          IF vpos=0 THEN
-            intrm_i<='0';
-          END IF;
-
+          
         WHEN 1 => NULL;
           
         WHEN 2 TO 9 => -- Objects
@@ -843,6 +830,16 @@ BEGIN
             cpt_v:=(cstack_cpt+1) MOD 4;
             cstack_cpt<=cpt_v;
           END IF;
+
+          IF hpos=0 AND 
+            (((vpos - VSTART) - 2*to_integer(delay_v)+64) MOD 16)=0 THEN
+            cstack_cpt_mem<=cstack_cpt;
+          END IF;
+          IF hpos=0 AND 
+            (((vpos - VSTART) - 2*to_integer(delay_v)+64) MOD 16)/=0 THEN
+            cstack_cpt<=cstack_cpt_mem;
+          END IF;
+                    
           bg<=bgpix(hpos,vpos,delay_h,delay_v,csmode,r_gram,r_grom,
                     cstack(cpt_v),r_sysram);
           
