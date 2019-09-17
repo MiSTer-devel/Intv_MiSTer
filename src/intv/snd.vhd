@@ -62,7 +62,6 @@ ARCHITECTURE rtl OF snd IS
   
   SIGNAL noise_a_en,noise_b_en,noise_c_en : std_logic;
   SIGNAL noise_per,noise_cpt : uv5;
-  SIGNAL noise_lfsr : uv32;
   SIGNAL noise_out  : std_logic;
   
   SIGNAL env_sus : std_logic;
@@ -79,6 +78,8 @@ ARCHITECTURE rtl OF snd IS
   
   SIGNAL pot : uv8;
   
+  SIGNAL poly17 : unsigned(16 DOWNTO 0);
+  SIGNAL ticknoise,ticknoise2 : std_logic;
   ------------------------------------------------
 BEGIN
   
@@ -98,7 +99,7 @@ BEGIN
       VARIABLE sig_v   : std_logic;
       VARIABLE out_v : uv5;
     BEGIN
-      sig_v:=(en_noise AND noise) XOR (en_gen AND gen);
+      sig_v:=(en_noise AND noise) OR (en_gen AND gen);
       ampli_v:=mux(m,env,amp);
       
       IF sig_v='0' THEN
@@ -116,7 +117,7 @@ BEGIN
     
     ------------------------------------
     VARIABLE lev_v : signed(7 DOWNTO 0);
-    
+    VARIABLE p17z : std_logic;
   BEGIN
     IF reset_na='0' THEN
       tone_a_out<='0';
@@ -172,7 +173,6 @@ BEGIN
           dr<="000" & noise_per;
           IF wr='1' THEN
             noise_per<=dw(4 DOWNTO 0);
-            noise_lfsr<=x"12345678";
             noise_cpt<="00000";
           END IF;
           
@@ -291,16 +291,29 @@ BEGIN
       IF tick='1' THEN
         IF noise_cpt/="00000" THEN
           noise_cpt<=noise_cpt-1;
+          ticknoise<='0';
         ELSE
-          noise_cpt<=noise_per;
-          noise_lfsr<=noise_lfsr(30 DOWNTO 0) &
-                       (noise_lfsr(31) XOR noise_lfsr(30) XOR
-                        noise_lfsr(29) XOR noise_lfsr(9));
+          IF noise_per="00000" THEN
+            noise_cpt<="00000";  
+          ELSE
+            noise_cpt<=noise_per-1;
+          END IF;
+          ticknoise<='1';
+        END IF;
+
+        ticknoise2<=ticknoise2 XOR ticknoise;
+
+        IF ticknoise='1' AND ticknoise2='1' THEN
+          p17z := '0';
+          IF poly17 = "00000000000000000" THEN
+            p17z := '1';
+          END IF;
+          poly17 <= (poly17(0) XOR poly17(2) XOR p17z) & poly17(16 DOWNTO 1);
         END IF;
       END IF;
-
-      noise_out<=noise_lfsr(0);
-
+      
+      noise_out<=poly17(0);
+      
       ------------------------------------------------------
       -- Envelope
       IF tick='1' THEN
