@@ -54,7 +54,9 @@ ENTITY stic IS
     busak  : IN  std_logic; -- Bus Acknowledge
     intrm  : OUT std_logic; -- Interrupt request maskable
     phi    : IN std_logic; -- PHI clock enable
-   
+    
+    ecs    : IN  std_logic;
+    
     ------------------------------------
     ad     : OUT uv16;
     
@@ -62,6 +64,11 @@ ENTITY stic IS
     snd_dr : IN  uv8;
     snd_dw : OUT uv8;
     snd_wr : OUT std_logic;
+
+    -- Audio chip ECS
+    snd2_dr : IN  uv8;
+    snd2_dw : OUT uv8;
+    snd2_wr : OUT std_logic;
     
     -- Cartridge
     cart_dr : IN  uv16;
@@ -370,11 +377,12 @@ ARCHITECTURE rtl OF stic IS
   END FUNCTION;
   
   ------------------------------------------------
-  SIGNAL pwr_x,pwr_y,pwr_a,pwr_c,pwr_sysram,pwr_gram,pwr_scram : std_logic;
+  SIGNAL pwr_x,pwr_y,pwr_a,pwr_c : std_logic;
+  SIGNAL pwr_ecsram,pwr_sysram,pwr_gram,pwr_scram : std_logic;
   SIGNAL pr_x,pr_y,pr_a,pr_c : uv14;
   SIGNAL pr_sysram : uv16;
-  SIGNAL pr_gram,pr_grom,pr_scram : uv8;
-  SIGNAL pr_exec : uv16;
+  SIGNAL pr_gram,pr_grom,pr_scram,pr_ecsram : uv8;
+  SIGNAL pr_execrom,pr_ecsrom : uv16;
   
   SIGNAL prd,pwr : std_logic;
   SIGNAL padrs  : uint16;
@@ -404,14 +412,19 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL r_gram,r_grom : uv8;
   SIGNAL r_sysram : uv16;
   
-  CONSTANT grom : arr8(0 TO 2047) := INIT_GROM;
+  CONSTANT GROM : arr8(0 TO 2047) := INIT_GROM;
   
   SIGNAL   gram : arr_uv8(0 TO 511) :=(OTHERS =>x"00"); -- 512 * 8bits
   SIGNAL sysram : arr_uv16(0 TO 511) :=(OTHERS =>x"0000"); -- 160h = 352 * 16bits real
   SIGNAL scram  : arr_uv8(0 TO 255) :=(OTHERS =>x"00"); -- 256 * 8bits
-  -- Executive ROM
-  SIGNAL exec : arr16(0 TO 4095) := INIT_EXEC;
 
+  SIGNAL ecsram : arr_uv8(0 TO 2047):=(OTHERS =>x"00"); -- 2k * 8bits
+
+  CONSTANT EXECROM : arr16(0 TO 4095) := INIT_EXEC; -- Executive ROM
+  
+  CONSTANT ECSROM  : arr16(0 TO 12287) := INIT_ECS; -- ECS ROM
+  SIGNAL bank : arr_uv4(0 TO 15);
+  
   CONSTANT PALETTE : arr_uv24(0 TO 15) := -- RRGGBB
     (x"0C0005",x"002DFF",x"FF3E00",x"C9D464", -- 8 primAry
      x"00780F",x"00A720",x"FAEA27",x"FFFCFF",
@@ -432,6 +445,7 @@ BEGIN
       bext_t<='0';
       bext_l<='0';
       csmode<='0';
+      bank<=(OTHERS =>x"0");
       
     ELSIF rising_edge(clk) THEN
       ----------------------------------
@@ -456,8 +470,11 @@ BEGIN
       pwr_gram<='0';
 
       snd_wr<='0';
+      snd2_wr<='0';
       cart_wr<='0';
-      snd_dw<=dw(7 DOWNTO 0);
+      snd_dw <=dw(7 DOWNTO 0);
+      snd2_dw<=dw(7 DOWNTO 0);
+      
       -- 14 bits registers
       -- 0000-0007 MOB X position regs ? ? ? Xsize VISB INTR X[7:0]
       -- 0008-000F MOB Y position regs ? ? Yflip Xflip Ysz4 Ysz2 Yres Y[6:0]
@@ -585,7 +602,7 @@ BEGIN
         
       -- EXEC --------------------------
       ELSIF padrs>=16#1000# AND padrs<=16#1FFF# THEN
-        dr<=pr_exec;
+        dr<=pr_execrom;
         
       -- Scratch RAM -------------------
       ELSIF padrs>=16#0100# AND padrs<=16#01EF# THEN
@@ -597,11 +614,42 @@ BEGIN
         dr<=x"00" & snd_dr;
         snd_wr<=pwr;
         
+      -- Sound chip ECS ----------------
+      ELSIF padrs>=16#00F0# AND padrs<=16#00FF# AND ecs='1' THEN
+        dr<=x"00" & snd2_dr;
+        snd2_wr<=pwr;
+        
+      -- RAM ECS -----------------------
+      ELSIF padrs>=16#4000# AND padrs<=16#47FF# AND ecs='1' THEN
+        dr<=x"00" & pr_ecsram;
+        pwr_ecsram<=pwr;
+        
+      -- ROM ECS -----------------------
+      ELSIF padrs  >=16#2000# AND padrs<=16#2FFF# AND ecs='1' AND bank(2)=x"1" THEN
+        dr<=pr_ecsrom;
+        
+      ELSIF padrs>=16#7000# AND padrs<=16#7FFF# AND ecs='1' AND bank(7)=x"0" THEN
+        dr<=pr_ecsrom;
+        
+      ELSIF padrs>=16#E000# AND padrs<=16#EFFF# AND ecs='1' AND bank(14)=x"1" THEN
+        dr<=pr_ecsrom;
+        
       -- Cartridges --------------------
       ELSE
         dr<=cart_dr;
         cart_wr<=pwr;
         
+      END IF;
+      
+      -- BANK SWITCH REG ---------------
+      IF padrs=16#2FFF# AND dw(15 DOWNTO 4)=x"2A5" AND pwr='1' AND ecs='1' THEN
+        bank(2)<=dw(3 DOWNTO 0);
+      END IF;
+      IF padrs=16#7FFF# AND dw(15 DOWNTO 4)=x"7A5" AND pwr='1' AND ecs='1' THEN
+        bank(7)<=dw(3 DOWNTO 0);
+      END IF;
+      IF padrs=16#EFFF# AND dw(15 DOWNTO 4)=x"EA5" AND pwr='1' AND ecs='1' THEN
+        bank(14)<=dw(3 DOWNTO 0);
       END IF;
       
       ----------------------------------
@@ -621,6 +669,7 @@ BEGIN
 
   ------------------------------------------------------------------------------
   Mem:PROCESS (clk,reset_na) IS
+    VARIABLE ad_v : uint16;
   BEGIN
     IF reset_na='0' THEN
       mobx<=(OTHERS =>"00000000000000");
@@ -637,11 +686,23 @@ BEGIN
       pr_a<=moba(padrs MOD 8);
       pr_c<=mobc(padrs MOD 8);
       pr_sysram<=sysram(padrs MOD 512);
-      pr_grom  <=grom(padrs MOD 2048);
+      pr_ecsram<=ecsram(padrs MOD 2048);
+      pr_grom  <=GROM(padrs MOD 2048);
       pr_gram  <=gram(padrs MOD 512);
       pr_scram <=scram(padrs MOD 256);
       
-      pr_exec  <=exec(padrs MOD 4096);
+      pr_execrom  <=EXECROM(padrs MOD 4096);
+      
+      IF padrs>=16#2000# AND padrs<=16#2FFF# THEN
+        ad_v:=padrs - 16#2000#;
+      ELSIF padrs>=16#7000# AND padrs<=16#7FFF# THEN
+        ad_v:=padrs - 16#6000#;
+      ELSIF padrs>=16#E000# AND padrs<=16#EFFF# THEN
+        ad_v:=padrs - 16#C000#;
+      ELSE
+        ad_v:=padrs MOD 4096;
+      END IF;
+      pr_ecsrom<=ECSROM(ad_v);
       
       -- Set collision bits
       FOR i IN 0 TO 7 LOOP
@@ -659,6 +720,7 @@ BEGIN
       IF pwr_c='1' THEN mobc(padrs MOD 8)<=dw(13 DOWNTO 0); END IF;
       
       IF pwr_sysram='1' THEN sysram(padrs MOD 512)<=dw(15 DOWNTO 0); END IF;
+      IF pwr_ecsram='1' THEN ecsram(padrs MOD 2048)<=dw(7 DOWNTO 0); END IF;
       IF pwr_gram='1'   THEN gram(padrs MOD 512)<=dw(7 DOWNTO 0); END IF;
       IF pwr_scram='1'  THEN scram(padrs MOD 256)<=dw(7 DOWNTO 0); END IF;
 
@@ -680,7 +742,7 @@ BEGIN
       r_a2<=r_a;
       
       r_gram <=gram(a_gmem MOD 512);
-      r_grom <=grom(a_gmem MOD 2048);
+      r_grom <=GROM(a_gmem MOD 2048);
       
       --------------------------
       
@@ -796,9 +858,11 @@ BEGIN
           END IF;
           over.a <='0';
           under.a<='0';
-          IF hpos=0 AND
-            vpos = 16 + VSTART + 8*12*2 THEN
+          IF hpos=0 AND vpos = 16 + VSTART + 8*12*2 THEN
             intrm_i<='1';
+          END IF;
+          IF hpos=0 AND vpos = 9 THEN
+            intrm_i<='0';
           END IF;
           
         WHEN 1 => NULL;

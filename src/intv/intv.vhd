@@ -130,6 +130,7 @@ ARCHITECTURE struct OF emu IS
     "-;" &
     "FS,ROMINT;" &
     "O47,MAP,Auto,0,1,2,3,4,5,6,7,8,9;" &
+    "O8,ECS,Off,On;" &
 --  "O0,Video standard,PAL,NTSC;" &
     "O3,Aspect ratio,4:3,16:9;" &
 --  "O46,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;" &
@@ -244,14 +245,17 @@ ARCHITECTURE struct OF emu IS
   
   SIGNAL ps2_key,ps2_key_delay,ps2_key_mem : std_logic_vector(10 DOWNTO 0);
   
-  SIGNAL key_0, key_1 , key_2 , key_3  : std_logic;
-  SIGNAL key_4, key_5 , key_6 , key_7  : std_logic;
-  SIGNAL key_8, key_9 , key_a , key_b  : std_logic;
-  SIGNAL key_r, key_w : std_logic;
+  SIGNAL key_0,key_1,key_2,key_3,key_4,key_5,key_6,key_7 : std_logic;
+  SIGNAL key_8,key_9,key_a,key_b,key_c,key_d,key_e,key_f : std_logic;
+  SIGNAL key_g,key_h,key_i,key_j,key_k,key_l,key_m,key_n : std_logic;
+  SIGNAL key_o,key_p,key_q,key_r,key_s,key_t,key_u,key_v : std_logic;
+  SIGNAL key_w,key_x,key_y,key_z : std_logic;
+  SIGNAL key_space,key_colon,key_period,key_comma : std_logic;
+  SIGNAL key_up,key_down,key_right,key_left : std_logic;
+  SIGNAL key_enter,key_esc,key_lshift,key_rshift,key_lctrl,key_rctrl : std_logic;
   
   SIGNAL key_rc   ,key_wc  ,key_bp ,key_pc  : std_logic;
   SIGNAL key_minus,key_plus,key_reg,key_mem : std_logic;
-  SIGNAL key_return,key_space               : std_logic;
   
   ----------------------------------------
   SIGNAL reset_na : std_logic;
@@ -269,16 +273,17 @@ ARCHITECTURE struct OF emu IS
   SIGNAL cad : uv16;
   SIGNAL selram : std_logic;
   
-  SIGNAL ntsc_pal,swap : std_logic;
+  SIGNAL ntsc_pal,ecs,ecs2,swap : std_logic;
 
   SIGNAL dr,dw,ad,cart_dr,cart_dw,rom_dr,ram_dr : uv16;
-  SIGNAL snd_dr,snd_dw : uv8;
-  SIGNAL snd_wr,cart_wr : std_logic;
-  SIGNAL sound : sv8;
+  SIGNAL snd_dr,snd_dw,snd2_dr,snd2_dw : uv8;
+  SIGNAL snd_wr,snd2_wr,cart_wr : std_logic;
+  SIGNAL sound,sound2 : sv8;
   SIGNAL bdic : uv3;
   SIGNAL bdrdy,busrq,busak,halt,intrm : std_logic;
   SIGNAL pa_i,pb_i,pa_o,pb_o : uv8;
-  SIGNAL pa_en,pb_en : std_logic;
+  SIGNAL pa2_i,pb2_i,pa2_o,pb2_o : uv8;
+  SIGNAL pa_en,pb_en,pa2_en,pb2_en : std_logic;
   SIGNAL map_reset : std_logic;
   SIGNAL map_cpt : uint4;
 
@@ -438,8 +443,9 @@ BEGIN
 
   ntsc_pal<=status(0);
   swap<=status(1);
-  
 
+  ecs<=status(8);
+  
   ----------------------------------------------------------
   ipll : pll
     PORT MAP (
@@ -513,10 +519,14 @@ BEGIN
       busak    => busak,
       intrm    => intrm,
       phi      => tick_cpu,
+      ecs      => ecs,
       ad       => ad,
       snd_dr   => snd_dr,
       snd_dw   => snd_dw,
       snd_wr   => snd_wr,
+      snd2_dr  => snd2_dr,
+      snd2_dw  => snd2_dw,
+      snd2_wr  => snd2_wr,
       cart_dr  => cart_dr,
       cart_dw  => cart_dw,
       cart_wr  => cart_wr,
@@ -551,8 +561,28 @@ BEGIN
       clk      => clksys,
       reset_na => reset_na);
 
-  audio_l<=std_logic_vector(sound) & x"00";
-  audio_r<=std_logic_vector(sound) & x"00";
+  -- Second audio ECS
+  i_snd2: ENTITY work.snd
+    PORT MAP (
+      ad       => ad,
+      dw       => snd2_dw,
+      dr       => snd2_dr,
+      wr       => snd2_wr,
+      sound    => sound2,
+      pa_i     => pa2_i,
+      pa_o     => pa2_o,
+      pa_en    => pa2_en,
+      pb_i     => pb2_i,
+      pb_o     => pb2_o,
+      pb_en    => pb2_en,
+      tick     => tick_snd,
+      clk      => clksys,
+      reset_na => reset_na);
+
+  audio_l<=std_logic_vector(sound) & x"00" WHEN ecs='0' ELSE
+           std_logic_vector(sound + sound2) & x"00";
+  audio_r<=std_logic_vector(sound) & x"00" WHEN ecs='0' ELSE
+           std_logic_vector(sound + sound2) & x"00";
   audio_s<='1';
   audio_mix<="11";
   
@@ -707,8 +737,9 @@ BEGIN
       END IF;
       
       mmap2<=mmap;
+      ecs2<=ecs;
       
-      IF mmap2/=mmap THEN
+      IF mmap2/=mmap OR ecs2/=ecs THEN
         map_cpt<=0;
       END IF;
       IF map_cpt<15 THEN
@@ -849,10 +880,8 @@ BEGIN
   -- IO MAPPING
   
   PROCESS (key_1,key_2,key_3,key_4,key_5,key_6,key_7,key_8,key_9,
-           key_0,key_r,key_w,key_space,key_return,swap,
-           joystick_0,joystick_1,joystick_analog_0,joystick_analog_1
-           ) IS
-    
+           key_0,key_r,key_w,key_space,key_enter,swap,
+           joystick_0,joystick_1,joystick_analog_0,joystick_analog_1) IS
     CONSTANT dirtable : arr_uv8(0 TO 15):= (-- NDLR
       x"00", -- 0000 : no press
       x"02", -- 0001 : E
@@ -889,27 +918,27 @@ BEGIN
       x"16",x"16",x"16",x"06",x"06",x"06",x"02",x"02",x"02",x"02",x"12",x"12",x"12",x"13",x"13",x"13",
       x"16",x"16",x"16",x"06",x"06",x"02",x"02",x"02",x"02",x"02",x"02",x"12",x"12",x"13",x"13",x"13");
     
-      VARIABLE io_v,io2_v : uv8;
+    VARIABLE io_v,io2_v : uv8;
   BEGIN
     -- PORT A
     io_v:=dirtable(to_integer(unsigned(joystick_0(3 DOWNTO 0)))); -- Direction cross
     io_v:=io_v OR dir16(to_integer((unsigned(joystick_analog_0( 7 DOWNTO 4)) + x"8") &
                                    (unsigned(joystick_analog_0(15 DOWNTO 12))  + x"8")));
-    io_v:=io_v OR ("10100000" AND sext((key_r      OR joystick_0( 4)),8)); -- Action UP
-    io_v:=io_v OR ("01100000" AND sext((key_a      OR joystick_0( 5)),8)); -- Action BL
-    io_v:=io_v OR ("11000000" AND sext((key_b      OR joystick_0( 6)),8)); -- Action BR
-    io_v:=io_v OR ("10001000" AND sext((key_space  OR joystick_0( 7)),8)); -- Clear
-    io_v:=io_v OR ("00101000" AND sext((key_return OR joystick_0( 8)),8)); -- Enter 
-    io_v:=io_v OR ("01001000" AND sext((key_0      OR joystick_0( 9)),8)); -- 0
-    io_v:=io_v OR ("10000001" AND sext((key_1      OR joystick_0(10)),8));
-    io_v:=io_v OR ("01000001" AND sext((key_2      OR joystick_0(11)),8));
-    io_v:=io_v OR ("00100001" AND sext((key_3      OR joystick_0(12)),8));
-    io_v:=io_v OR ("10000010" AND sext((key_4      OR joystick_0(13)),8));
-    io_v:=io_v OR ("01000010" AND sext((key_5      OR joystick_0(14)),8));
-    io_v:=io_v OR ("00100010" AND sext((key_6      OR joystick_0(15)),8));
-    io_v:=io_v OR ("10000100" AND sext((key_7      OR joystick_0(16)),8));
-    io_v:=io_v OR ("01000100" AND sext((key_8      OR joystick_0(17)),8));
-    io_v:=io_v OR ("00100100" AND sext((key_9      OR joystick_0(18)),8));
+    io_v:=io_v OR ("10100000" AND sext(joystick_0( 4),8)); -- Action UP
+    io_v:=io_v OR ("01100000" AND sext(joystick_0( 5),8)); -- Action BL
+    io_v:=io_v OR ("11000000" AND sext(joystick_0( 6),8)); -- Action BR
+    io_v:=io_v OR ("10001000" AND sext(joystick_0( 7),8)); -- Clear
+    io_v:=io_v OR ("00101000" AND sext(joystick_0( 8),8)); -- Enter 
+    io_v:=io_v OR ("01001000" AND sext(joystick_0( 9),8)); -- 0
+    io_v:=io_v OR ("10000001" AND sext(joystick_0(10),8));
+    io_v:=io_v OR ("01000001" AND sext(joystick_0(11),8));
+    io_v:=io_v OR ("00100001" AND sext(joystick_0(12),8));
+    io_v:=io_v OR ("10000010" AND sext(joystick_0(13),8));
+    io_v:=io_v OR ("01000010" AND sext(joystick_0(14),8));
+    io_v:=io_v OR ("00100010" AND sext(joystick_0(15),8));
+    io_v:=io_v OR ("10000100" AND sext(joystick_0(16),8));
+    io_v:=io_v OR ("01000100" AND sext(joystick_0(17),8));
+    io_v:=io_v OR ("00100100" AND sext(joystick_0(18),8));
     
     ---------------------------------
     -- PORT B
@@ -936,28 +965,76 @@ BEGIN
     pb_i<=NOT mux(swap,io2_v,io_v);
     
   END PROCESS;
-
+  
+  ----------------------------------------------------------
+  -- ECS Keyboard
+  
+  --bits | 0     1     2     3     4     5      6      7
+  -------+----------------------------------------------------
+  --  7  | n/a   n/a   n/a   n/a   n/a   n/a    n/a    n/a
+  --  6  | shift n/a   n/a   n/a   n/a   n/a    n/a    n/a
+  --  5  | a     ctrl  right 1     q     up     down   space
+  --  4  | d     e     2     3     w     s      z      x
+  --  3  | g     t     4     5     r     f      c      v
+  --  2  | j     u     6     7     y     h      b      n
+  --  1  | l     o     8     9     i     k      m      comma
+  --  0  | n/a   enter 0     esc   p     scolon period left
+  -------+----------------------------------------------------
+    
+  PROCESS(key_0,key_1,key_2,key_3,key_4,key_5,key_6,key_7,key_8,key_9,
+          key_a,key_b,key_c,key_d,key_e,key_f,key_g,key_h,key_i,key_j,
+          key_k,key_l,key_m,key_n,key_o,key_p,key_q,key_r,key_s,key_t,
+          key_u,key_v,key_w,key_x,key_y,key_z,
+          key_space,key_colon,key_period,key_comma,
+          key_up,key_down,key_right,key_left,
+          key_enter,key_esc,key_lshift,key_rshift,key_lctrl,key_rctrl,pa2_o,pb2_o,pa2_en,pb2_en) IS
+    VARIABLE dr : uv8;
+  BEGIN
+    IF pa2_en='1' AND pb2_en='0' THEN
+      dr:=x"00";
+      dr:=dr OR mux(NOT pa2_o(7),
+                    "00000000",x"00");
+      dr:=dr OR mux(NOT pa2_o(6),
+                    (key_rshift OR key_lshift) & "0000000",x"00");
+      dr:=dr OR mux(NOT pa2_o(5),
+                    key_a & (key_rctrl OR key_lctrl) & key_right & key_1 & key_q & key_up & key_down & key_space,x"00");
+      dr:=dr OR mux(NOT pa2_o(4),
+                    key_d & key_e & key_2 & key_3 & key_w & key_s & key_z & key_x,x"00");
+      dr:=dr OR mux(NOT pa2_o(3),
+                    key_g & key_t & key_4 & key_5 & key_r & key_f & key_c & key_v,x"00");
+      dr:=dr OR mux(NOT pa2_o(2),
+                    key_j & key_u & key_6 & key_7 & key_y  & key_h & key_b & key_n,x"00");
+      dr:=dr OR mux(NOT pa2_o(1),
+                    key_l & key_o & key_8 & key_9 & key_i & key_k & key_m & key_comma,x"00");
+      dr:=dr OR mux(NOT pa2_o(0),
+                    '0' & key_enter & key_0 & key_esc & key_p & key_colon & key_period & key_left,x"00");
+      dr:=NOT dr;
+    ELSIF pa2_en='0' AND pb2_en='1' THEN
+      dr:=x"FF";
+      -- <TODO>
+    ELSE
+      dr:=x"FF";
+    END IF;
+    pb2_i<=dr;
+    pa2_i<=dr;
+      
+  END PROCESS;
   
   ----------------------------------------------------------
   KeyCodes:PROCESS (clksys,reset_na) IS
   BEGIN
     IF reset_na='0' THEN
-         key_0<='0';
-         key_1<='0';
-         key_2<='0';
-         key_3<='0';
-         key_4<='0';
-         key_5<='0';
-         key_6<='0';
-         key_7<='0';
-         key_8<='0';
-         key_9<='0';
-         key_a<='0';
-         key_b<='0';
-         key_r<='0';
-         key_w<='0';
-         key_space <='0'; -- SPACE
-         key_return<='0'; -- RETURN
+         key_0<='0';  key_1<='0';  key_2<='0';  key_3<='0';  key_4<='0';
+         key_5<='0';  key_6<='0';  key_7<='0';  key_8<='0';  key_9<='0';
+         key_a<='0';  key_b<='0';  key_c<='0';  key_d<='0';  key_e<='0';  key_f<='0';
+         key_g<='0';  key_h<='0';  key_i<='0';  key_j<='0';  key_k<='0';  key_l<='0';
+         key_m<='0';  key_n<='0';  key_o<='0';  key_p<='0';  key_q<='0';  key_r<='0';
+         key_s<='0';  key_t<='0';  key_u<='0';  key_v<='0';  key_w<='0';  key_x<='0';
+         key_y<='0';  key_z <='0';
+         key_space<='0'; key_colon<='0'; key_period<='0'; key_comma <='0';
+         key_up<='0';    key_down<='0';  key_right<='0';  key_left <='0';
+         key_enter<='0'; key_esc<='0';   key_lshift<='0'; key_rshift<='0';
+         key_lctrl<='0'; key_rctrl<='0';
          
     ELSIF rising_edge(clksys) THEN
       ps2_key_delay<=ps2_key;
@@ -976,10 +1053,44 @@ BEGIN
           WHEN x"46" => key_9<=ps2_key(9);
           WHEN x"1C" => key_a<=ps2_key(9);
           WHEN x"32" => key_b<=ps2_key(9);
-          WHEN x"2D" => key_r<=ps2_key(9); -- R
-          WHEN x"1D" => key_w<=ps2_key(9); -- W
-          WHEN x"29" => key_space <=ps2_key(9); -- SPACE
-          WHEN x"5A" => key_return<=ps2_key(9); -- RETURN
+          WHEN x"21" => key_c<=ps2_key(9);
+          WHEN x"23" => key_d<=ps2_key(9);
+          WHEN x"24" => key_e<=ps2_key(9);
+          WHEN x"2B" => key_f<=ps2_key(9);
+          WHEN x"34" => key_g<=ps2_key(9);
+          WHEN x"33" => key_h<=ps2_key(9);
+          WHEN x"43" => key_i<=ps2_key(9);
+          WHEN x"3B" => key_j<=ps2_key(9);
+          WHEN x"42" => key_k<=ps2_key(9);
+          WHEN x"4B" => key_l<=ps2_key(9);
+          WHEN x"3A" => key_m<=ps2_key(9);
+          WHEN x"31" => key_n<=ps2_key(9);
+          WHEN x"44" => key_o<=ps2_key(9);
+          WHEN x"4D" => key_p<=ps2_key(9);
+          WHEN x"15" => key_q<=ps2_key(9);
+          WHEN x"2D" => key_r<=ps2_key(9);
+          WHEN x"1B" => key_s<=ps2_key(9);
+          WHEN x"2C" => key_t<=ps2_key(9);
+          WHEN x"3C" => key_u<=ps2_key(9);
+          WHEN x"2A" => key_v<=ps2_key(9);
+          WHEN x"1D" => key_w<=ps2_key(9);
+          WHEN x"22" => key_x<=ps2_key(9);
+          WHEN x"35" => key_y<=ps2_key(9);
+          WHEN x"1A" => key_z<=ps2_key(9);
+          WHEN x"29" => key_space <=ps2_key(9);
+          WHEN x"5A" => key_enter <=ps2_key(9);
+          WHEN x"27" => key_colon<=ps2_key(9);
+          WHEN x"49" => key_period<=ps2_key(9);
+          WHEN x"41" => key_comma <=ps2_key(9);
+          WHEN x"63" => key_up<=ps2_key(9);
+          WHEN x"60" => key_down<=ps2_key(9);
+          WHEN x"6A" => key_right<=ps2_key(9);
+          WHEN x"61" => key_left <=ps2_key(9);
+          WHEN x"08" => key_esc<=ps2_key(9);
+          WHEN x"12" => key_lshift<=ps2_key(9);
+          WHEN x"59" => key_rshift<=ps2_key(9);
+          WHEN x"11" => key_lctrl<=ps2_key(9);
+          WHEN x"58" => key_rctrl<=ps2_key(9);
           WHEN OTHERS => NULL;
         END CASE;
       END IF;
@@ -991,11 +1102,6 @@ BEGIN
   vga_sl<="00";
   vga_f1<='0';
   
-  audio_l<=std_logic_vector(sound) & x"00";
-  audio_r<=std_logic_vector(sound) & x"00";
-  audio_s<='1';
-  audio_mix<="11";
-
   video_arx <= x"04" WHEN status(3)='0' ELSE x"16";
   video_ary <= x"03" WHEN status(3)='0' ELSE x"09";
   
@@ -1072,7 +1178,7 @@ BEGIN
   END PROCESS;
 
   clk_video<=clksys;
-  
+
   ovo_in0<='0' & pa_i(7 DOWNTO 4) &
             '0' & pa_i(3 DOWNTO 0) &
             CC(' ') &
@@ -1106,23 +1212,33 @@ BEGIN
             "0000" & busak;
             --CS(" ");
   
-  ovo_in1<=
-    CS("        ") &
-    '0' & xcrc(31 DOWNTO 28) &
-    '0' & xcrc(27 DOWNTO 24) &
-    '0' & xcrc(23 DOWNTO 20) &
-    '0' & xcrc(19 DOWNTO 16) &
-    '0' & xcrc(15 DOWNTO 12) &
-    '0' & xcrc(11 DOWNTO 8) &
-    '0' & xcrc(7 DOWNTO 4) &
-    '0' & xcrc(3 DOWNTO 0) &
-    CC(' ') &
-    '0' & hitbg(7 DOWNTO 4) &
-    '0' & hitbg(3 DOWNTO 0) &
-    CC(' ') &
-    '0' & hitbo(7 DOWNTO 4) &
-    '0' & hitbo(3 DOWNTO 0) &
-    CS("          ");
+  ovo_in1<='0' & pa2_i(7 DOWNTO 4) &
+            '0' & pa2_i(3 DOWNTO 0) &
+            "1001" & pa2_en &
+            '0' & pa2_o(7 DOWNTO 4) &
+            '0' & pa2_o(3 DOWNTO 0) &
+            CS(" ") &
+            '0' & pb2_i(7 DOWNTO 4) &
+            '0' & pb2_i(3 DOWNTO 0) &
+            "1001" & pb2_en &
+            '0' & pb2_o(7 DOWNTO 4) &
+            '0' & pb2_o(3 DOWNTO 0) &
+            CS(" ") &
+            '0' & xcrc(31 DOWNTO 28) &
+            '0' & xcrc(27 DOWNTO 24) &
+            '0' & xcrc(23 DOWNTO 20) &
+            '0' & xcrc(19 DOWNTO 16) &
+            '0' & xcrc(15 DOWNTO 12) &
+            '0' & xcrc(11 DOWNTO 8) &
+            '0' & xcrc(7 DOWNTO 4) &
+            '0' & xcrc(3 DOWNTO 0) &
+            CC(' ') &
+            '0' & hitbg(7 DOWNTO 4) &
+            '0' & hitbg(3 DOWNTO 0) &
+            CC(' ') &
+            '0' & hitbo(7 DOWNTO 4) &
+            '0' & hitbo(3 DOWNTO 0) &
+            CS("      ");
   
   ovo_ena<=status(2);
   

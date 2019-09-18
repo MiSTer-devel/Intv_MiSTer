@@ -44,6 +44,23 @@ with open("grom.bin","rb") as fin:
         i = i +1
     fou.write(");\n");
 
+i=0
+fou.write("  CONSTANT INIT_ECS : arr16 := (\n    ");
+
+with open("ecs.bin","rb") as fin:
+    b = fin.read(1)
+    while b:
+        if i!=0:
+            fou.write(",")
+            if i& 7==0:
+                fou.write("\n    ")
+        fou.write("x\"{:02X}".format(ord(b)))
+        b = fin.read(1)
+        fou.write("{:02X}\"".format(ord(b)))
+        b = fin.read(1)
+        i = i +1
+    fou.write(");\n");
+
 fou.write("END PACKAGE;");
 fou.close
 

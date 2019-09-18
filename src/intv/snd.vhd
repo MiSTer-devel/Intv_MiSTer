@@ -45,7 +45,7 @@ END ENTITY snd;
 
 ARCHITECTURE rtl OF snd IS
   
-  SIGNAL pa_en_i,pb_en_i : std_logic;
+  SIGNAL pa_in_i,pb_in_i : std_logic;
 
   ------------------------------------------------
   SIGNAL tone_a_per,tone_b_per,tone_c_per : uv12;
@@ -83,8 +83,8 @@ ARCHITECTURE rtl OF snd IS
   ------------------------------------------------
 BEGIN
   
-  pa_en<=pa_en_i;
-  pb_en<=pb_en_i;
+  pa_en<=NOT pa_in_i;
+  pb_en<=NOT pb_in_i;
   
   SONO:PROCESS(clk,reset_na) IS
     ------------------------------------
@@ -177,12 +177,12 @@ BEGIN
           END IF;
           
         WHEN "1000" => -- 8:R7 : Mixer Control I/O Disable
-          dr<=NOT(pb_en_i & pa_en_i &
+          dr<=NOT(pb_in_i & pa_in_i &
                        noise_c_en & noise_b_en & noise_a_en &
                        tone_c_en & tone_b_en & tone_a_en);
           IF wr='1' THEN
-            pb_en_i<=NOT dw(7);
-            pa_en_i<=NOT dw(6);
+            pb_in_i<=NOT dw(7);
+            pa_in_i<=NOT dw(6);
             noise_c_en<=NOT dw(5);
             noise_b_en<=NOT dw(4);
             noise_a_en<=NOT dw(3);
