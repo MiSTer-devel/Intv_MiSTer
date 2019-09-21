@@ -280,19 +280,18 @@ ARCHITECTURE rtl OF stic IS
   
   FUNCTION visible(hpos : uint9;
                    vpos : uint9;
-                   bext_l,bext_t : std_logic
-                   ) RETURN boolean IS
+                   bext_l,bext_t : std_logic) RETURN boolean IS
     VARIABLE h,v : boolean;
   BEGIN
     IF bext_l='0' THEN
-      h:=(hpos >= 8 + HSTART AND hpos <  8 + HSTART + 8*20);
+      h:=(hpos >= 8 + HSTART AND hpos <  7 + HSTART + 8*20);
     ELSE
-      h:=(hpos >= 16 + HSTART AND hpos <  8 + HSTART + 8*20);
+      h:=(hpos >= 16 + HSTART AND hpos <  7 + HSTART + 8*20);
     END IF;
     IF bext_t='0' THEN
-      v:=(vpos/2 >= 8 + VSTART/2 AND vpos/2 <  8 + VSTART/2 + 8*12);
+      v:=(vpos >= 16 + VSTART AND vpos < 15 + VSTART + 16*12);
     ELSE
-      v:=(vpos/2 >= 16 + VSTART/2 AND vpos/2 <  8 + VSTART/2 + 8*12);
+      v:=(vpos >= 32 + VSTART AND vpos < 15 + VSTART + 16*12);
     END IF;
     RETURN h AND v;
   END FUNCTION;
@@ -303,19 +302,19 @@ ARCHITECTURE rtl OF stic IS
  --    -- This 1 pixel border is 1 double-res pixel tall on top and bottom. 
  --       It's the same border as is used for border-collision detect.
   FUNCTION coll_mob(hpos : uint9;
-                   vpos : uint9;
-                   bext_l,bext_t : std_logic) RETURN boolean IS
+                    vpos : uint9;
+                    bext_l,bext_t : std_logic) RETURN boolean IS
     VARIABLE h,v : boolean;
   BEGIN
     IF bext_l='0' THEN
-      h:=(hpos >= 8 + HSTART-1 AND hpos <  8 + HSTART + 8*20+1);
+      h:=(hpos >=  8 + HSTART-1 AND hpos < 8 + HSTART + 8*20);
     ELSE
-      h:=(hpos >= 16 + HSTART-1 AND hpos < 8 + HSTART + 8*20+1);
+      h:=(hpos >= 16 + HSTART-1 AND hpos < 8 + HSTART + 8*20);
     END IF;
     IF bext_t='0' THEN
-      v:=(vpos >= 16 + VSTART-1 AND vpos < 16 + VSTART + 16*12 + 1);
+      v:=(vpos >= 16 + VSTART-1 AND vpos < 16 + VSTART + 16*12 +1);
     ELSE
-      v:=(vpos >= 32 + VSTART-1 AND vpos < 16 + VSTART + 16*12 + 1);
+      v:=(vpos >= 32 + VSTART-1 AND vpos < 16 + VSTART + 16*12 +1);
     END IF;
     RETURN h AND v;
   END FUNCTION;
@@ -332,14 +331,14 @@ ARCHITECTURE rtl OF stic IS
     VARIABLE h,v : boolean;
   BEGIN
     IF bext_l='0' THEN
-      h:=(hpos >=  8 + HSTART AND hpos < 8 + HSTART + 8*20 +1);
+      h:=(hpos >   8 + HSTART AND hpos < 7 + HSTART + 8*20+1);
     ELSE
-      h:=(hpos >= 16 + HSTART AND hpos < 8 + HSTART + 8*20 +1);
+      h:=(hpos >  16 + HSTART AND hpos < 7 + HSTART + 8*20+1);
     END IF;
     IF bext_t='0' THEN
-      v:=(vpos >= 16 + VSTART AND vpos < 16 + VSTART + 16*12 -2);
+      v:=(vpos >  16 + VSTART AND vpos < 15 + VSTART + 16*12-1);
     ELSE
-      v:=(vpos >= 32 + VSTART AND vpos < 16 + VSTART + 16*12 -2);
+      v:=(vpos >  32 + VSTART AND vpos < 15 + VSTART + 16*12-1);
     END IF;
     RETURN h AND v;
   END FUNCTION;
@@ -358,12 +357,13 @@ ARCHITECTURE rtl OF stic IS
                        bext_l,bext_t : std_logic) RETURN boolean IS
     VARIABLE h,v : boolean;
   BEGIN
+    
     IF bext_l='0' THEN
-      h:=(hpos =  8 + HSTART - 1 OR  hpos =  7 + HSTART + 8*20+1);
-      v:=(hpos >= 8 + HSTART - 1 AND hpos <  8 + HSTART + 8*20+1);
+      h:=(hpos =  8 + HSTART - 1 OR  hpos =  7 + HSTART + 8*20);
+      v:=(hpos >= 8 + HSTART - 1 AND hpos <  8 + HSTART + 8*20);
     ELSE
-      h:=(hpos = 16 + HSTART - 1 OR  hpos =  7 + HSTART + 8*20+1);
-      v:=(hpos >=16 + HSTART - 1 AND hpos <  8 + HSTART + 8*20+1);
+      h:=(hpos = 16 + HSTART - 1 OR  hpos =  7 + HSTART + 8*20);
+      v:=(hpos >=16 + HSTART - 1 AND hpos <  8 + HSTART + 8*20);
     END IF;
     
     IF bext_t='0' THEN
