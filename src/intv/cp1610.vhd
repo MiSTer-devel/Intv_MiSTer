@@ -387,7 +387,7 @@ BEGIN
             ro<=ri1_r+1;
             wreg<='1';
           WHEN "110" =>
-            IF op_r(8 DOWNTO 6)/="001" THEN -- Pre decrement
+            IF op_r(8 DOWNTO 6)/="001" THEN -- Not MVO : Pre decrement
               dw_i<=ri1_r-1;
               ro<=ri1_r-1;
               wreg<='1';
@@ -464,7 +464,7 @@ BEGIN
 
         --------------------------------
       WHEN sCBRANCH1 =>
-		nri1<="111";
+        nri1<="111";
         dw_i<=ri1_r;
         bdic_i<=B_BAR;
         nro<="111";
@@ -492,9 +492,9 @@ BEGIN
         nri1<="111";
         nro<="111";
         IF op_r(5)='0' THEN
-          ro<=ri1_r + ("000000" & disp_r(9 DOWNTO 0));
+          ro<=ri1_r + disp_r;
         ELSE
-          ro<=ri1_r + ("111111" & NOT disp_r(9 DOWNTO 0));
+          ro<=ri1_r + NOT disp_r;
         END IF;
         state<=sCBRANCH5;
         wreg<='1';

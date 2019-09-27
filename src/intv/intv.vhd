@@ -235,13 +235,20 @@ ARCHITECTURE struct OF emu IS
   SIGNAL ioctl_download,ioctl_download2 : std_logic;
   SIGNAL ioctl_index    : std_logic_vector(7 DOWNTO 0);
   SIGNAL ioctl_wr       : std_logic;
+  SIGNAL ioctl_wr2      : std_logic;
   SIGNAL ioctl_addr     : std_logic_vector(24 DOWNTO 0);
   SIGNAL ioctl_dout     : std_logic_vector(7 DOWNTO 0);
   SIGNAL ioctl_wait     : std_logic :='0';
 
-  SIGNAL w_wrl,w_wrh    : std_logic;
+  SIGNAL adrs : uv17;
+  TYPE enum_state IS (sIDLE,sDOWN,sDOWN_BIN,sCLR,
+                      sDOWN_ROM,sDOWN_ROM2,sDOWN_ROM3,sDOWN_ROM4,
+                      sDOWN_LOOP,sDOWN_CRC,sDOWN_CRC2,
+                      sDOWN_RANGE,sDOWN_RANGE2,sDOWN_RANGE3,sWAIT);
+  SIGNAL state : enum_state;
+  SIGNAL w_wrl,w_wrh : std_logic;
   SIGNAL w_d : uv8;
-  SIGNAL w_a : uv15;
+  SIGNAL w_a : uv16;
   
   SIGNAL ps2_key,ps2_key_delay,ps2_key_mem : std_logic_vector(10 DOWNTO 0);
   
@@ -263,19 +270,18 @@ ARCHITECTURE struct OF emu IS
   
   SIGNAL clkdiv,clkdivsnd : uint6 :=0;
   SIGNAL tick_cpu,tick_cpup,tick_snd : std_logic;
-
-  SIGNAL ram : arr_uv16(0 TO 2047);
   
-  SIGNAL carth,cartl : arr_uv8(0 TO 32767);
+  SHARED VARIABLE carth,cartl : arr_uv8(0 TO 65535);
   ATTRIBUTE ramstyle : string;
-  ATTRIBUTE ramstyle OF carth : SIGNAL IS "no_rw_check";
-  ATTRIBUTE ramstyle OF cartl : SIGNAL IS "no_rw_check";
+  ATTRIBUTE ramstyle OF carth : VARIABLE IS "no_rw_check";
+  ATTRIBUTE ramstyle OF cartl : VARIABLE IS "no_rw_check";
   SIGNAL cad : uv16;
-  SIGNAL selram : std_logic;
   
   SIGNAL ntsc_pal,ecs,ecs2,swap : std_logic;
 
-  SIGNAL dr,dw,ad,cart_dr,cart_dw,rom_dr,ram_dr : uv16;
+  SIGNAL dr,dw,ad,cart_dr,cart_dw : uv16;
+  SIGNAL cart_drl,cart_drh : uv8;
+  SIGNAL cart_acc : std_logic;
   SIGNAL snd_dr,snd_dw,snd2_dr,snd2_dw : uv8;
   SIGNAL snd_wr,snd2_wr,cart_wr : std_logic;
   SIGNAL sound,sound2 : sv8;
@@ -348,9 +354,6 @@ ARCHITECTURE struct OF emu IS
   SIGNAL ovo_in0  : unsigned(0 TO 32*5-1) :=(OTHERS =>'0');
   SIGNAL ovo_in1  : unsigned(0 TO 32*5-1) :=(OTHERS =>'0');
   
-  SIGNAL hits : uv64;
-  SIGNAL hitbg,hitbo : uv8;
-
   TYPE type_jmap IS RECORD
     crc : uv32;
     m   : uint4;
@@ -374,8 +377,172 @@ ARCHITECTURE struct OF emu IS
 
   SIGNAL crc,xcrc : uv32;
   SIGNAL search,found : std_logic;
-  SIGNAL mapcpt : natural RANGE 0 TO MAPS'length+1;
+  SIGNAL mapcpt : natural RANGE 0 TO MAPS'length+2;
   SIGNAL smap,mmap,mmap2 : uint4;
+  
+  SIGNAL imap : uv8;
+  SIGNAL iacc : uint4;
+  SIGNAL ifine : uv8;
+  SIGNAL idx,cidx  : uint9;
+  SIGNAL rden,wren,bsen,byen : std_logic;
+  SIGNAL icart_dw : uv16;
+  SIGNAL icart_wr : std_logic;
+  SIGNAL fine : std_logic;
+  SIGNAL icart_acc_dwr,icart_map_dwr : std_logic;
+  SIGNAL icart_acc_ddw : uint4;
+  SIGNAL icart_map_ddw : uv8;
+  SIGNAL icart_map_da,icart_acc_da : uint9;
+  SIGNAL icart_fine_dwr : std_logic;
+  SIGNAL icart_fine_ddw : uv8;
+  SIGNAL icart_fine_da : uint9;
+  
+  SIGNAL icart : std_logic;
+  SIGNAL icart_pwr,cart_wrm : std_logic;
+  SIGNAL zone_min,zone_max : uv8;
+  SIGNAL numrange,numzone : natural RANGE 0 TO 31;
+  
+  ----------------------------------------------------------
+  -- MAPPINGS
+  -- MAP 0
+  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
+  --   $2000 - $2FFF = $D000   ;  4K to $D000 - $DFFF
+  --   $3000 - $3FFF = $F000   ;  4K to $F000 - $FFFF
+ 
+  -- MAP 1
+  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
+  --   $2000 - $4FFF = $D000   ; 12K to $D000 - $FFFF
+
+  -- MAP 2
+  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
+  --   $2000 - $4FFF = $9000   ; 12K to $9000 - $BFFF
+  --   $5000 - $5FFF = $D000   ;  4K to $D000 - $DFFF
+
+  -- MAP 3
+  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
+  --   $2000 - $3FFF = $9000   ;  8K to $9000 - $AFFF
+  --   $4000 - $4FFF = $D000   ;  4K to $D000 - $DFFF
+  --   $5000 - $5FFF = $F000   ;  4K to $F000 - $FFFF
+
+  -- MAP 4
+  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
+  --   RAM $D000 - $D3FF = RAM 8
+
+  -- MAP 5
+  --   $0000 - $2FFF = $5000   ; 12K to $5000 - $7FFF
+  --   $3000 - $5FFF = $9000   ; 12K to $9000 - $BFFF
+
+  -- MAP 6
+  --   $0000 - $1FFF = $6000   ;  8K to $6000 - $7FFF
+
+  -- MAP 7
+  --   $0000 - $1FFF = $4800   ;  8K to $4800 - $67FF
+
+  -- MAP 8
+  --   $0000 - $0FFF = $5000   ;  4K to $5000 - $6000
+  --   $1000 - $1FFF = $7000   ;  4K to $7000 - $7FFF
+
+  -- MAP 9
+  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
+  --   $2000 - $3FFF = $9000   ;  8K to $9000 - $AFFF
+  --   $4000 - $4FFF = $D000   ;  4K to $D000 - $DFFF
+  --   $5000 - $5FFF = $F000   ;  4K to $F000 - $FFFF
+  --   RAM $8800 - $8FFF = RAM 8
+  
+  ----------------------------------------------------------
+  
+  SIGNAL icart_map : arr_uv8(0 TO 32*16-1) := (
+    --00    08    10    18    20    28    30    38    40    48    50    58    60    68    70    78    80    88    90    98    A0    A8    B0    B8    C0    C8    D0    D8    E0    E8    F0    F8
+    -- MAP 0
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"20",x"28",x"00",x"00",x"30",x"38",
+    -- MAP 1
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"20",x"28",x"30",x"38",x"40",x"48",
+    -- MAP 2
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"00",x"20",x"28",x"30",x"38",x"40",x"48",x"00",x"00",x"50",x"58",x"00",x"00",x"00",x"00",
+    -- MAP 3
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"00",x"20",x"28",x"30",x"38",x"00",x"00",x"00",x"00",x"40",x"48",x"00",x"00",x"50",x"58",
+    -- MAP 4
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"20",x"00",x"00",x"00",x"00",x"00",  
+    -- MAP 5
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"20",x"28",x"00",x"00",x"30",x"38",x"40",x"48",x"50",x"58",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    -- MAP 6
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    -- MAP 7
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    -- MAP 8
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"00",x"00",x"10",x"18",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    -- MAP 9
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",x"10",x"18",x"00",x"00",x"00",x"60",x"20",x"28",x"30",x"38",x"00",x"00",x"00",x"00",x"40",x"48",x"00",x"00",x"50",x"58",  
+    -- MAP 10,11,12,13,14 : Unused. 15 : Programmable
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  
+    x"00",x"08",x"10",x"18",x"20",x"28",x"30",x"38",x"40",x"48",x"50",x"58",x"60",x"68",x"70",x"78",x"80",x"88",x"90",x"98",x"A0",x"A8",x"B0",x"B8",x"C0",x"C8",x"D0",x"D8",x"E0",x"E8",x"F0",x"F8");
+  
+  SIGNAL icart_fine : arr_uv8(0 TO 32*16-1) := (
+    --00    08    10    18    20    28    30    38    40    48    50    58    60    68    70    78    80    88    90    98    A0    A8    B0    B8    C0    C8    D0    D8    E0    E8    F0    F8
+    -- MAP 0
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 1
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 2
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 3
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 4
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"03",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 5
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 6
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 7
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 8
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 9
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    -- MAP 10,11,12,13,14 : Unused. 15 : Programmable
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",
+    x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07",x"07");
+  
+  -- Access table 0:RD 1:WR 3:Remap
+  TYPE arr_uint4 IS ARRAY(natural RANGE <>) OF uint4;
+  SIGNAL icart_acc : arr_uint4(0 TO 32*16-1) := (
+    --  10  20  30  40  50  60  70  80  90  A0  B0  C0  D0  E0  F0
+    -- MAP 0
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,1,
+    -- MAP 1
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,
+    -- MAP 2
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0,1,1,0,0,0,0,
+    -- MAP 3
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,0,0,1,1,
+    -- MAP 4. RAM D000:D3FF
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,
+    -- MAP 5
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,
+    -- MAP 6
+    0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    -- MAP 7
+    0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    -- MAP 8
+    0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    -- MAP 9. RAM 8800:8FFF
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,3,1,1,1,1,0,0,0,0,1,1,0,0,1,1,
+    -- MAP 10,11,12,13,14 : Unused. 15 : Programmable
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+  
+  ----------------------------------------------------------
   
 BEGIN
 
@@ -440,10 +607,9 @@ BEGIN
       ps2_key            => ps2_key,
       ps2_mouse          => OPEN,
       ps2_mouse_ext      => OPEN);
-
+  
   ntsc_pal<=status(0);
   swap<=status(1);
-
   ecs<=status(8);
   
   ----------------------------------------------------------
@@ -527,12 +693,12 @@ BEGIN
       snd2_dr  => snd2_dr,
       snd2_dw  => snd2_dw,
       snd2_wr  => snd2_wr,
+      cart_acc => cart_acc,
       cart_dr  => cart_dr,
       cart_dw  => cart_dw,
       cart_wr  => cart_wr,
-      hits => hits,
-      hitbg => hitbg,
-      hitbo => hitbo,
+      icart_dw => icart_dw,
+      icart_wr => icart_wr,
       vid_r    => vga_r_i,
       vid_g    => vga_g_i,
       vid_b    => vga_b_i,
@@ -590,147 +756,29 @@ BEGIN
   led_power<="00";
   led_disk<="00";
   
-  ----------------------------------------------------------
-  -- MAPPINGS
-  -- MAP 0
-  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
-  --   $2000 - $2FFF = $D000   ;  4K to $D000 - $DFFF
-  --   $3000 - $3FFF = $F000   ;  4K to $F000 - $FFFF
- 
-  -- MAP 1
-  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
-  --   $2000 - $4FFF = $D000   ; 12K to $D000 - $FFFF
-
-  -- MAP 2
-  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
-  --   $2000 - $4FFF = $9000   ; 12K to $9000 - $BFFF
-  --   $5000 - $5FFF = $D000   ;  4K to $D000 - $DFFF
-
-  -- MAP 3
-  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
-  --   $2000 - $3FFF = $9000   ;  8K to $9000 - $AFFF
-  --   $4000 - $4FFF = $D000   ;  4K to $D000 - $DFFF
-  --   $5000 - $5FFF = $F000   ;  4K to $F000 - $FFFF
-
-  -- MAP 4
-  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
-  --   RAM $D000 - $D3FF = RAM 8
-
-  -- MAP 5
-  --   $0000 - $2FFF = $5000   ; 12K to $5000 - $7FFF
-  --   $3000 - $5FFF = $9000   ; 12K to $9000 - $BFFF
-
-  -- MAP 6
-  --   $0000 - $1FFF = $6000   ;  8K to $6000 - $7FFF
-
-  -- MAP 7
-  --   $0000 - $1FFF = $4800   ;  8K to $4800 - $67FF
-
-  -- MAP 8
-  --   $0000 - $0FFF = $5000   ;  4K to $5000 - $6000
-  --   $1000 - $1FFF = $7000   ;  4K to $7000 - $7FFF
-
-  -- MAP 9
-  --   $0000 - $1FFF = $5000   ;  8K to $5000 - $6FFF
-  --   $2000 - $3FFF = $9000   ;  8K to $9000 - $AFFF
-  --   $4000 - $4FFF = $D000   ;  4K to $D000 - $DFFF
-  --   $5000 - $5FFF = $F000   ;  4K to $F000 - $FFFF
-  --   RAM $8800 - $8FFF = RAM 8
-
-  PROCESS(ad,mmap) IS
-    VARIABLE aad : uv12;
-    FUNCTION sel(ad : uv15;
-                 c  : boolean) RETURN unsigned IS
-    BEGIN
-      IF c THEN RETURN '1' & ad;
-           ELSE RETURN x"0000";
-           END IF;
-    END FUNCTION;
-  BEGIN
-    aad:=ad(11 DOWNTO 0);
-    selram<='0';
-    
-    CASE mmap IS
-      WHEN 0 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"6") OR
-             sel("010" & aad,ad(15 DOWNTO 12)=x"D") OR
-             sel("011" & aad,ad(15 DOWNTO 12)=x"F");
-        
-      WHEN 1 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-            sel("001" & aad,ad(15 DOWNTO 12)=x"6") OR
-            sel("010" & aad,ad(15 DOWNTO 12)=x"D") OR
-            sel("011" & aad,ad(15 DOWNTO 12)=x"E") OR
-            sel("100" & aad,ad(15 DOWNTO 12)=x"F");
-        
-      WHEN 2 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"6") OR
-             sel("010" & aad,ad(15 DOWNTO 12)=x"9") OR
-             sel("011" & aad,ad(15 DOWNTO 12)=x"A") OR
-             sel("100" & aad,ad(15 DOWNTO 12)=x"B") OR
-             sel("101" & aad,ad(15 DOWNTO 12)=x"D");
-        
-      WHEN 3 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"6") OR
-             sel("010" & aad,ad(15 DOWNTO 12)=x"9") OR
-             sel("011" & aad,ad(15 DOWNTO 12)=x"A") OR
-             sel("100" & aad,ad(15 DOWNTO 12)=x"D") OR
-             sel("101" & aad,ad(15 DOWNTO 12)=x"F");
-        
-      WHEN 4 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"6");
-        
-        selram<=to_std_logic(ad(15 DOWNTO 10)="110100");
-        
-      WHEN 5 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"6") OR
-             sel("010" & aad,ad(15 DOWNTO 12)=x"7") OR
-             sel("011" & aad,ad(15 DOWNTO 12)=x"9") OR
-             sel("100" & aad,ad(15 DOWNTO 12)=x"A") OR
-             sel("101" & aad,ad(15 DOWNTO 12)=x"B");
-        
-      WHEN 6 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"6") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"7");
-        
-      WHEN 7 =>
-        cad<=sel("0000" & aad(10 DOWNTO 0),ad(15 DOWNTO 11)="01001") OR -- 48
-             sel("0001" & aad(10 DOWNTO 0),ad(15 DOWNTO 11)="01010") OR -- 50
-             sel("0010" & aad(10 DOWNTO 0),ad(15 DOWNTO 11)="01011") OR -- 58
-             sel("0011" & aad(10 DOWNTO 0),ad(15 DOWNTO 11)="01100");   -- 60
-        
-      WHEN 8 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"7");
-
-      WHEN 9 =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"6") OR
-             sel("010" & aad,ad(15 DOWNTO 12)=x"9") OR
-             sel("011" & aad,ad(15 DOWNTO 12)=x"A") OR
-             sel("100" & aad,ad(15 DOWNTO 12)=x"D") OR
-             sel("101" & aad,ad(15 DOWNTO 12)=x"F");
-        selram<=to_std_logic(ad(15 DOWNTO 10)="110100");
-        
-      WHEN OTHERS =>
-        cad<=sel("000" & aad,ad(15 DOWNTO 12)=x"5") OR
-             sel("001" & aad,ad(15 DOWNTO 12)=x"6") OR
-             sel("010" & aad,ad(15 DOWNTO 12)=x"D") OR
-             sel("011" & aad,ad(15 DOWNTO 12)=x"F");
-        
-    END CASE;
-  END PROCESS;
-
-  Map_Change:PROCESS(clksys) IS
+  Seq:PROCESS(clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN
+      ------------------------------------------------------
+      idx<=to_integer(ad(15 DOWNTO 11)) + 32 * mmap;
       
-      IF status(7 DOWNTO 4)="0000" THEN
+      cad<=(imap + ad(10 DOWNTO 8)) & ad(7 DOWNTO 0);
+      
+      rden<=to_unsigned(iacc,4)(0);
+      wren<=to_unsigned(iacc,4)(1);
+      byen<=to_unsigned(iacc,4)(2);
+      bsen<=to_unsigned(iacc,4)(3);
+      
+      -- [0xxx 0yyy]  : Enable between X and Y
+      fine<=to_std_logic(to_integer(ifine(6 DOWNTO 4))
+                         <=to_integer(ad(10 DOWNTO 8)) AND
+                         to_integer(ifine(2 DOWNTO 0))
+                         >=to_integer(ad(10 DOWNTO 8)));
+      
+      ------------------------------------------------------
+      IF icart='1' THEN
+        mmap<=15;
+      ELSIF status(7 DOWNTO 4)="0000" THEN
         mmap<=mux(found='1',smap,0);
       ELSE
         mmap<=to_integer(unsigned(status(7 DOWNTO 4)))-1;
@@ -826,7 +874,7 @@ BEGIN
           smap<=MAPS(mapcpt).m;
           found<='1';
         END IF;
-        IF mapcpt=MAPS'length THEN
+        IF mapcpt=MAPS'length-1 THEN
           search<='0';
         END IF;
       END IF;
@@ -834,47 +882,262 @@ BEGIN
   END PROCESS CRCCalc;
   
   ----------------------------------------------------------
-  rom_dr<=carth(to_integer(cad(14 DOWNTO 0))) &
-          cartl(to_integer(cad(14 DOWNTO 0))) WHEN rising_edge(clksys);
   
-  IRAM:PROCESS(clksys) IS
+  ReadRom:PROCESS(clksys) IS
+    VARIABLE wr_v : std_logic;
   BEGIN
     IF rising_edge(clksys) THEN
-      ram_dr<=ram(to_integer(cad(10 DOWNTO 0)));
-      IF cart_wr='1' AND selram='1' THEN
-        ram(to_integer(cad(10 DOWNTO 0)))<=cart_dw;
+      ioctl_wr2<=ioctl_wr;
+      wr_v:=ioctl_wr AND NOT ioctl_wait;
+      
+      IF ioctl_download='0' THEN
+        state<=sIDLE;
       END IF;
-    END IF;
-  END PROCESS IRAM;
-  
-  cart_dr<=rom_dr WHEN cad(15)='1' ELSE
-           ram_dr WHEN selram='1' ELSE
-           x"FFFF";
-  
-  icart:PROCESS(clksys) IS
-  BEGIN
-    IF rising_edge(clksys) THEN
-      -- Download
-      IF w_wrl='1' THEN
-        cartl(to_integer(w_a))<=w_d;
-      END IF;
-      IF w_wrh='1' THEN
-        carth(to_integer(w_a))<=w_d;
-      END IF;
-    END IF;
-  END PROCESS icart;
-  
-  PROCESS(clksys) IS
-  BEGIN
-    IF rising_edge(clksys) THEN
-      w_wrl<=ioctl_download AND ioctl_wr AND     ioctl_addr(0);
-      w_wrh<=ioctl_download AND ioctl_wr AND NOT ioctl_addr(0);
+      
+      w_wrl<='0';
+      w_wrh<='0';
       w_d <=unsigned(ioctl_dout);
-      w_a <=unsigned(ioctl_addr(15 DOWNTO 1));
+      icart_acc_dwr<='0';
+      icart_map_dwr<='0';
+      icart_fine_dwr<='0';
+      
+      ioctl_wait<=ioctl_wr;
+      
+      ------------------------------------------------------
+      CASE state IS
+        ----------------------------------------------------
+        WHEN sIDLE =>
+          w_a<=(OTHERS =>'0');
+          IF ioctl_download='1' THEN
+            ioctl_wait<='1';
+            state<=sCLR;
+          END IF;
+          
+        WHEN sCLR =>
+          ioctl_wait<='1';
+          w_d<=x"FF";
+          w_wrl<='1';
+          w_wrh<='1';
+          w_a<=w_a+1;
+          IF w_a=x"FFFF" THEN
+            state<=sDOWN;
+          END IF;
+          
+        WHEN sDOWN =>
+          IF wr_v='1' THEN
+            IF ioctl_dout=x"A8" THEN
+              state<=sDOWN_ROM;
+              icart<='1';
+            ELSE
+              state<=sDOWN_BIN;
+              icart<='0';
+            END IF;
+          END IF;
+          w_wrl<=wr_v AND     ioctl_addr(0);
+          w_wrh<=wr_v AND NOT ioctl_addr(0);
+          w_a <=unsigned(ioctl_addr(16 DOWNTO 1));
+          
+        ----------------------------------------------------
+        -- Plain binary file
+        WHEN sDOWN_BIN =>
+          w_wrl<=wr_v AND     ioctl_addr(0);
+          w_wrh<=wr_v AND NOT ioctl_addr(0);
+          w_a <=unsigned(ioctl_addr(16 DOWNTO 1));
+          
+        ----------------------------------------------------
+        -- Intellicart ROM format
+          -- Number of zones
+        WHEN sDOWN_ROM =>
+          IF wr_v='1' THEN
+            numzone<=to_integer(unsigned(ioctl_dout));
+            state <=sDOWN_ROM2;
+          END IF;
+          
+        WHEN sDOWN_ROM2 =>
+          IF wr_v='1' THEN -- Ignore complement
+            state<=sDOWN_ROM3;
+          END IF;
+          
+          -- Data start / end
+        WHEN sDOWN_ROM3 =>
+          IF wr_v='1' THEN
+            zone_min<=unsigned(ioctl_dout);
+            state<=sDOWN_ROM4;
+          END IF;
+
+        WHEN sDOWN_ROM4 =>
+          IF wr_v='1' THEN
+            zone_max<=unsigned(ioctl_dout);
+            state<=sDOWN_LOOP;
+          END IF;
+          adrs<=zone_min & '0' & x"00";
+          
+          -- Data copy
+        WHEN sDOWN_LOOP =>
+          IF wr_v='1' THEN
+            w_wrl<=wr_v AND     adrs(0);
+            w_wrh<=wr_v AND NOT adrs(0);
+            w_a <=unsigned(adrs(16 DOWNTO 1));
+            
+            adrs<=adrs+1;
+            IF (adrs + 1)=(zone_max+1) & '0' & x"00" THEN
+              state<=sDOWN_CRC;
+            END IF;
+          END IF;
+          
+          -- Data CRC
+        WHEN sDOWN_CRC =>
+          IF wr_v='1' THEN -- CRC. Ignore
+            state<=sDOWN_CRC2;
+          END IF;
+          
+        WHEN sDOWN_CRC2 =>
+          IF wr_v='1' THEN -- CRC Ignore
+            numzone<=numzone-1;
+            IF numzone>1 THEN
+              state<=sDOWN_ROM3;
+            ELSE
+              state<=sDOWN_RANGE;
+            END IF;
+          END IF;
+          numrange<=0;
+          
+        WHEN sDOWN_RANGE =>
+          -- Enable Table : 16 bytes -> 32 zones
+          -- 0 : Read Enable
+          -- 1 : Write Enable
+          -- 2 : Byte mem
+          -- 3 : BankSwitch Enable
+          IF wr_v='1' THEN
+            icart_acc_dwr<='1';
+            icart_acc_ddw<=to_integer(unsigned(ioctl_dout(3 DOWNTO 0)));
+            icart_acc_da<=numrange*2 + 32 *15;
+            state<=sDOWN_RANGE2;
+          END IF;
+          
+        WHEN sDOWN_RANGE2 =>
+          icart_acc_dwr<='1';
+          icart_acc_ddw<=to_integer(unsigned(ioctl_dout(7 DOWNTO 4)));
+          icart_acc_da<=numrange*2 + 1 + 32 *15;
+          numrange<=(numrange+1) MOD 16;
+          IF numrange=15 THEN
+            state<=sDOWN_RANGE3;
+            numrange<=0;
+          ELSE
+            state<=sDOWN_RANGE;
+          END IF;
+          
+        WHEN sDOWN_RANGE3 =>
+          -- Adress Restriction table : 32 octets pour 64 zones
+          
+          IF wr_v='1' THEN
+            icart_map_dwr<='1';
+            icart_map_ddw<=to_unsigned(numrange*8,8);
+            icart_map_da<=numrange + 32*15;
+            
+            icart_fine_dwr<='1';
+            icart_fine_ddw<=unsigned(ioctl_dout);
+            icart_fine_da<=(numrange / 16) +
+                           (numrange MOD 16)*2 + 32*15;
+            
+            numrange<=(numrange+1) MOD 32;
+            IF numrange=31 THEN
+              state<=sWAIT;
+            END IF;
+          END IF;
+          
+        WHEN sWAIT =>
+          NULL;
+		  
+      END CASE;
     END IF;
-  END PROCESS;
+  END PROCESS ReadRom;
   
-  ioctl_wait<='0';
+  ----------------------------------------------------------
+  cart_dr<=(cart_drh & cart_drl) WHEN cart_acc='1' AND byen='0' ELSE
+           (x"FF" & cart_drl)    WHEN cart_acc='1' AND byen='1' ELSE x"FFFF";
+  
+  cart_acc<=rden AND fine;
+  
+  ----------------------------------------------------------
+  -- Icart memory
+  CartH1:PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      cart_drl<=cartl(to_integer(cad));
+      IF cart_wrm='1' THEN
+        cartl(to_integer(cad)):=cart_dw(7 DOWNTO 0);
+      END IF;
+      
+      cart_drh<=carth(to_integer(cad));
+      IF cart_wrm='1' THEN
+        carth(to_integer(cad)):=cart_dw(15 DOWNTO 8);
+      END IF;
+    END IF;
+  END PROCESS CartH1;
+  
+  CartH2:PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      IF w_wrl='1' THEN
+        cartl(to_integer(w_a)):=w_d;
+      END IF;
+      
+      IF w_wrh='1' THEN
+        carth(to_integer(w_a)):=w_d;
+      END IF;
+    END IF;
+  END PROCESS CartH2;
+  
+  cart_wrm<=cart_wr AND wren;
+  
+  ----------------------------------------------------------
+  -- ICART mapping table
+  icarmap:PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      imap <=icart_map(idx); -- Remapping table
+      IF icart_map_dwr='1' THEN
+        icart_map(idx)<=icart_map_ddw;
+      END IF;
+    END IF;
+  END PROCESS icarmap;
+  
+  icarmap2:PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      IF icart_pwr='1' THEN
+        icart_map(cidx)<=icart_dw(7 DOWNTO 0);
+      END IF;
+    END IF;
+  END PROCESS icarmap2;
+
+  cidx<=to_integer(ad(3 DOWNTO 0) & ad(4)) WHEN ioctl_download='0'
+         ELSE icart_map_da;
+
+  iacc <=icart_acc(idx) WHEN rising_edge(clksys);
+  
+  icaracc2:PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      IF icart_acc_dwr='1' THEN
+        icart_acc(icart_acc_da)<=icart_acc_ddw;
+      END IF;
+    END IF;
+  END PROCESS icaracc2;
+  
+  icart_pwr<=icart_wr AND bsen AND fine;
+  
+  ifine<=icart_fine(idx) WHEN rising_edge(clksys);
+  
+  icarfine2:PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      IF icart_fine_dwr='1' THEN
+        icart_fine(icart_fine_da)<=icart_fine_ddw;
+      END IF;
+    END IF;
+  END PROCESS icarfine2;
   
   ----------------------------------------------------------
   -- IO MAPPING
@@ -1232,13 +1495,7 @@ BEGIN
             '0' & xcrc(11 DOWNTO 8) &
             '0' & xcrc(7 DOWNTO 4) &
             '0' & xcrc(3 DOWNTO 0) &
-            CC(' ') &
-            '0' & hitbg(7 DOWNTO 4) &
-            '0' & hitbg(3 DOWNTO 0) &
-            CC(' ') &
-            '0' & hitbo(7 DOWNTO 4) &
-            '0' & hitbo(3 DOWNTO 0) &
-            CS("      ");
+            CS("            ");
   
   ovo_ena<=status(2);
   

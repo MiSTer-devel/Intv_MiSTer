@@ -71,12 +71,14 @@ ENTITY stic IS
     snd2_wr : OUT std_logic;
     
     -- Cartridge
-    cart_dr : IN  uv16;
-    cart_dw : OUT uv16;
-    cart_wr : OUT std_logic;
-    
-    -- Executive ROM
-    --exec_dr : IN uv10;
+    cart_acc : IN std_logic;
+    cart_dr  : IN  uv16;
+    cart_dw  : OUT uv16;
+    cart_wr  : OUT std_logic;
+
+    -- Intellicart Registers
+    icart_dw : OUT uv16;
+    icart_wr : OUT std_logic;
     
     hits  : OUT uv64;
     hitbg : OUT uv8;
@@ -472,8 +474,9 @@ BEGIN
       snd_wr<='0';
       snd2_wr<='0';
       cart_wr<='0';
-      snd_dw <=dw(7 DOWNTO 0);
-      snd2_dw<=dw(7 DOWNTO 0);
+      snd_dw  <=dw(7 DOWNTO 0);
+      snd2_dw <=dw(7 DOWNTO 0);
+      icart_dw<=dw;
       
       -- 14 bits registers
       -- 0000-0007 MOB X position regs ? ? ? Xsize VISB INTR X[7:0]
@@ -650,6 +653,12 @@ BEGIN
       END IF;
       IF padrs=16#EFFF# AND dw(15 DOWNTO 4)=x"EA5" AND pwr='1' AND ecs='1' THEN
         bank(14)<=dw(3 DOWNTO 0);
+      END IF;
+      
+      -- INTELLICART REGS --------------
+      icart_wr<='0';
+      IF padrs>=16#40# AND padrs<=16#5F# THEN
+        icart_wr<=pwr;
       END IF;
       
       ----------------------------------
