@@ -2,15 +2,17 @@
 import os
 
 if not os.path.isfile("exec.bin") or not os.path.isfile("grom.bin"):
-    print("\n\n  Missing 'exec.bin' or 'grom.bin'\n\n")
+    print("\n\n  Missing 'exec.bin', 'grom.bin', 'ecs.bin' or 'sp0256-012.bin' \n\n")
     exit()
 
    
 fou = open("rom_pack.vhd","w")
 fou.write("LIBRARY IEEE;\nUSE IEEE.std_logic_1164.ALL;\nUSE IEEE.numeric_std.ALL;\n");
 fou.write("PACKAGE rom_pack IS\n");
+fou.write("\n");
 fou.write("  TYPE arr16 IS ARRAY(natural RANGE<>) OF unsigned(15 DOWNTO 0);\n");
 fou.write("  TYPE arr8  IS ARRAY(natural RANGE<>) OF unsigned(7 DOWNTO 0);\n");
+fou.write("\n");
 
 i=0
 fou.write("  CONSTANT INIT_EXEC : arr16 := (\n    ");
@@ -28,6 +30,7 @@ with open("exec.bin","rb") as fin:
         b = fin.read(1)
         i = i +1
     fou.write(");\n");
+fou.write("\n");
 
 i=0
 fou.write("  CONSTANT INIT_GROM : arr8 := (\n    ");
@@ -43,6 +46,7 @@ with open("grom.bin","rb") as fin:
         b = fin.read(1)
         i = i +1
     fou.write(");\n");
+fou.write("\n");
 
 i=0
 fou.write("  CONSTANT INIT_ECS : arr16 := (\n    ");
@@ -60,7 +64,24 @@ with open("ecs.bin","rb") as fin:
         b = fin.read(1)
         i = i +1
     fou.write(");\n");
+fou.write("\n");
 
+i=0
+fou.write("  CONSTANT INIT_VOICE : arr8 := (\n    ");
+
+with open("sp0256-012.bin","rb") as fin:
+    b = fin.read(1)
+    while b:
+        if i!=0:
+            fou.write(",")
+            if i& 15==0:
+                fou.write("\n    ")
+        fou.write("x\"{:02X}\"".format(ord(b)))
+        b = fin.read(1)
+        i = i +1
+    fou.write(");\n");
+fou.write("\n");
+    
 fou.write("END PACKAGE;");
 fou.close
 

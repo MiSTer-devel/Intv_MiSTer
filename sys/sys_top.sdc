@@ -20,6 +20,10 @@ set_clock_groups -asynchronous \
    -group [get_clocks { *|h2f_user0_clk}] \
    -group [get_clocks { FPGA_CLK1_50 FPGA_CLK2_50 FPGA_CLK3_50}]
 
+set_clock_groups -exclusive \
+   -group [get_clocks { emu|ipll|pll_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk}] \
+   -group [get_clocks { emu|ipll|pll_inst|altera_pll_i|general[1].gpll~PLL_OUTPUT_COUNTER|divclk}]
+
 set_output_delay -max -clock HDMI_CLK 3.0ns [get_ports {HDMI_TX_D[*] HDMI_TX_DE HDMI_TX_HS HDMI_TX_VS}]
 set_output_delay -min -clock HDMI_CLK 2.0ns [get_ports {HDMI_TX_D[*] HDMI_TX_DE HDMI_TX_HS HDMI_TX_VS}]
 

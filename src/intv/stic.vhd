@@ -3,7 +3,7 @@
 --------------------------------------------------------------------------------
 -- DO 4/2019
 --------------------------------------------------------------------------------
--- VHDL-2002
+-- VHDL-1993
 --------------------------------------------------------------------------------
 -- STIC + SYSRAM + GRAM + GROM + Decode addresses
 
@@ -55,7 +55,9 @@ ENTITY stic IS
     intrm  : OUT std_logic; -- Interrupt request maskable
     phi    : IN std_logic; -- PHI clock enable
     
+    pal    : IN  std_logic;
     ecs    : IN  std_logic;
+    ivoice : IN  std_logic;
     
     ------------------------------------
     ad     : OUT uv16;
@@ -70,12 +72,17 @@ ENTITY stic IS
     snd2_dw : OUT uv8;
     snd2_wr : OUT std_logic;
     
+    -- IVoice
+    ivoice_dr : IN  uv16;
+    ivoice_dw : OUT uv16;
+    ivoice_wr : OUT std_logic;
+    
     -- Cartridge
     cart_acc : IN std_logic;
     cart_dr  : IN  uv16;
     cart_dw  : OUT uv16;
     cart_wr  : OUT std_logic;
-
+    
     -- Intellicart Registers
     icart_dw : OUT uv16;
     icart_wr : OUT std_logic;
@@ -109,7 +116,7 @@ ARCHITECTURE rtl OF stic IS
   
   SIGNAL hpos,hpos2,hlen,hsync,hsyncend,hdisp : uint9;
   SIGNAL vpos,vpos2,vlen,vsync,vsyncend,vdisp : uint9;
-  CONSTANT HSTART : uint9 :=20;
+  CONSTANT HSTART : uint9 :=6; --20;
   CONSTANT VSTART : uint9 :=12;
   SIGNAL cyc : natural RANGE 0 TO 11;
   
@@ -473,9 +480,11 @@ BEGIN
 
       snd_wr<='0';
       snd2_wr<='0';
+      ivoice_wr<='0';
       cart_wr<='0';
       snd_dw  <=dw(7 DOWNTO 0);
       snd2_dw <=dw(7 DOWNTO 0);
+      ivoice_dw<=dw;
       icart_dw<=dw;
       
       -- 14 bits registers
@@ -616,6 +625,11 @@ BEGIN
       ELSIF padrs>=16#01F0# AND padrs<=16#01FF# THEN
         dr<=x"00" & snd_dr;
         snd_wr<=pwr;
+        
+      -- IntelliVoice ------------------
+      ELSIF padrs>=16#0080# AND padrs<=16#0081# AND ivoice='1' THEN
+        dr<=ivoice_dr;
+        ivoice_wr<=pwr;
         
       -- Sound chip ECS ----------------
       ELSIF padrs>=16#00F0# AND padrs<=16#00FF# AND ecs='1' THEN
@@ -815,16 +829,15 @@ BEGIN
   END PROCESS MemAdrs;
 
   ----------------------------------
-  -- NTSC
-  hdisp<=212;
-  hsync<=225;
-  hsyncend<=227;
-  hlen <=228;
+  hdisp<=180    WHEN pal='0' ELSE 180;
+  hsync<=185    WHEN pal='0' ELSE 208;
+  hsyncend<=202 WHEN pal='0' ELSE 227;
+  hlen <=228    WHEN pal='0' ELSE 256;
 
-  vdisp<=252;
-  vsync<=253;
-  vsyncend<=260;
-  vlen <=262;
+  vdisp<=240    WHEN pal='0' ELSE 288;
+  vsync<=242    WHEN pal='0' ELSE 290;
+  vsyncend<=245 WHEN pal='0' ELSE 293;
+  vlen <=262    WHEN pal='0' ELSE 312;
   
   ------------------------------------------------------------------------------
   Sync:PROCESS(clk,reset_na) IS
@@ -853,11 +866,11 @@ BEGIN
       ----------------------------------
       CASE cyc IS
         WHEN 0 => -- CLEAR, video sweep
-          IF hpos<hlen THEN
+          IF hpos<hlen-1 THEN
             hpos<=hpos+1;
           ELSE
             hpos<=0;
-            IF vpos<vlen THEN
+            IF vpos<vlen-1 THEN
               vpos<=vpos+1;
             ELSE
               vpos<=0;
@@ -956,8 +969,8 @@ BEGIN
       vid_b<=PALETTE(to_integer(col.col))( 7 DOWNTO 0);
       
       vid_hs<=to_std_logic(hpos>=hsync AND hpos<hsyncend);
-      vid_vs<=to_std_logic((vpos=vsync AND hpos>=vsync) OR
-                           (vpos>=vsync AND vpos<vsyncend) OR
+      vid_vs<=to_std_logic((vpos=vsync AND hpos>=hsync) OR
+                           (vpos>vsync AND vpos<vsyncend) OR
                            (vpos=vsyncend AND hpos<hsyncend)) ;
       
       vid_de<=to_std_logic(hpos<hdisp AND vpos<vdisp);
@@ -971,35 +984,35 @@ BEGIN
       
       ----------------------------------
       -- BUSRQ (just for slowing down the CPU)
-      IF ((vpos=VSTART) OR
-         (vpos=VSTART+1       + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16    + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*2  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*3  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*4  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*5  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*6  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*7  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*8  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*9  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*10 + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*11 + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*12 + to_integer(delay_v))) AND hpos=0 THEN
+      IF (vpos=VSTART-1                             AND hpos=0) OR
+         (vpos=VSTART+1       + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16    + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*2  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*3  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*4  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*5  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*6  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*7  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*8  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*9  + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*10 + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*11 + to_integer(delay_v) AND hpos=0) OR
+         (vpos=VSTART+1+16*12 + to_integer(delay_v) AND hpos=0) THEN
         busrq<='1';
-      ELSIF ((vpos=VSTART) OR
-         (vpos=VSTART+1       + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16    + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*2  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*3  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*4  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*5  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*6  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*7  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*8  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*9  + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*10 + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*11 + to_integer(delay_v)) OR
-         (vpos=VSTART+1+16*12 + to_integer(delay_v))) AND hpos=128 THEN
+      ELSIF (vpos=VSTART AND hpos=0) OR
+         (vpos=VSTART+2       + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16    + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*2  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*3  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*4  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*5  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*6  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*7  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*8  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*9  + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*10 + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+2+16*11 + to_integer(delay_v) AND hpos=212) OR
+         (vpos=VSTART+1+16*12 + to_integer(delay_v) AND hpos=176) THEN
         busrq<='0';
       END IF;
     END IF;

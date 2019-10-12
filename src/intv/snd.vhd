@@ -24,7 +24,7 @@ ENTITY snd IS
     wr       : IN  std_logic;
     
     --------------------------
-    sound    : OUT signed(7 DOWNTO 0);
+    sound    : OUT sv8;
     
     --------------------------
     pa_i      : IN  uv8;

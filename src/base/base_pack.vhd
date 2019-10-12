@@ -86,8 +86,29 @@ PACKAGE base_pack IS
   SUBTYPE uint10 IS natural RANGE 0 TO 1023;
   SUBTYPE uint11 IS natural RANGE 0 TO 2047;
   SUBTYPE uint12 IS natural RANGE 0 TO 4095;
+  SUBTYPE uint13 IS natural RANGE 0 TO 8191;
+  SUBTYPE uint14 IS natural RANGE 0 TO 16383;
+  SUBTYPE uint15 IS natural RANGE 0 TO 32767;
   SUBTYPE uint16 IS natural RANGE 0 TO 65535;
   SUBTYPE uint24 IS natural RANGE 0 TO 16777215;
+
+  SUBTYPE int2  IS integer RANGE     -2 TO 1;
+  SUBTYPE int3  IS integer RANGE     -4 TO 3;
+  SUBTYPE int4  IS integer RANGE     -8 TO 7;
+  SUBTYPE int5  IS integer RANGE    -16 TO 15;
+  SUBTYPE int6  IS integer RANGE    -32 TO 31;
+  SUBTYPE int7  IS integer RANGE    -64 TO 63;
+  SUBTYPE int8  IS integer RANGE   -128 TO 127;
+  SUBTYPE int9  IS integer RANGE   -256 TO 255;
+  SUBTYPE int10 IS integer RANGE   -512 TO 511;
+  SUBTYPE int11 IS integer RANGE  -1024 TO 1023;
+  SUBTYPE int12 IS integer RANGE  -2048 TO 2047;
+  SUBTYPE int13 IS integer RANGE  -4096 TO 4095;
+  SUBTYPE int14 IS integer RANGE  -8192 TO 8191;
+  SUBTYPE int15 IS integer RANGE -16384 TO 16383;
+  SUBTYPE int16 IS integer RANGE -32768 TO 32767;
+  SUBTYPE int17 IS integer RANGE -65536 TO 65535;
+  
   
   -------------------------------------------------------------
   FUNCTION v_or  (CONSTANT v : unsigned) RETURN std_logic;
@@ -125,8 +146,8 @@ PACKAGE base_pack IS
   --------------------------------------
   FUNCTION mux (
     s : boolean;
-    a : natural;
-    b : natural) RETURN natural;
+    a : integer;
+    b : integer) RETURN integer;
   --------------------------------------
   FUNCTION mux (
     s : std_logic;
@@ -323,9 +344,9 @@ PACKAGE BODY base_pack IS
   -- Sélection/Multiplexage  s=1:a, s=0:b
   FUNCTION mux (
     s : boolean;
-    a : natural;
-    b : natural)
-    RETURN natural IS
+    a : integer;
+    b : integer)
+    RETURN integer IS
   BEGIN
     IF s THEN
       RETURN a;

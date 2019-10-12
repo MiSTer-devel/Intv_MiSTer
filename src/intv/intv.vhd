@@ -1,9 +1,8 @@
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- Intellivision
-
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- Developed with the help of the JZINTV emulator
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 LIBRARY IEEE;
 USE IEEE.std_logic_1164.all;
@@ -124,6 +123,18 @@ ARCHITECTURE struct OF emu IS
       locked   : out std_logic  -- export
       );
   END COMPONENT pll;
+
+  COMPONENT altclkctrl IS
+    PORT (
+      clkselect : IN std_logic_vector(1 DOWNTO 0);
+      ena       : IN std_logic;
+      inclk     : IN std_logic_vector(3 DOWNTO 0);
+      outclk    : OUT std_logic
+      );
+  END COMPONENT altclkctrl;
+
+  SIGNAL inclk : std_logic_vector(3 DOWNTO 0);
+  SIGNAL clkselect : std_logic_vector(1 DOWNTO 0);
   
   CONSTANT CONF_STR : string := 
     "Intellivision;;" &
@@ -131,9 +142,10 @@ ARCHITECTURE struct OF emu IS
     "FS,ROMINT;" &
     "O47,MAP,Auto,0,1,2,3,4,5,6,7,8,9;" &
     "O8,ECS,Off,On;" &
---  "O0,Video standard,PAL,NTSC;" &
+    "O9,Voice,On,Off;" &
     "O3,Aspect ratio,4:3,16:9;" &
 --  "O46,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;" &
+    "O0,Video standard,NTSC,PAL;" &
     "O1,Swap Joystick,Off,On;" &
     "O2,Overlay,Off,On;" &
     "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;" &
@@ -268,8 +280,8 @@ ARCHITECTURE struct OF emu IS
   SIGNAL reset_na : std_logic;
   SIGNAL clksys,clksys_ntsc,clksys_pal,pll_locked : std_logic;
   
-  SIGNAL clkdiv,clkdivsnd : uint6 :=0;
-  SIGNAL tick_cpu,tick_cpup,tick_snd : std_logic;
+  SIGNAL clkdiv,clkdivsnd,clkdivivoice : uint6 :=0;
+  SIGNAL tick_cpu,tick_cpup,tick_snd,tick_ivoice : std_logic;
   
   SHARED VARIABLE carth,cartl : arr_uv8(0 TO 65535);
   ATTRIBUTE ramstyle : string;
@@ -277,14 +289,18 @@ ARCHITECTURE struct OF emu IS
   ATTRIBUTE ramstyle OF cartl : VARIABLE IS "no_rw_check";
   SIGNAL cad : uv16;
   
-  SIGNAL ntsc_pal,ecs,ecs2,swap : std_logic;
+  SIGNAL pal,ecs,ecs2,swap : std_logic;
 
   SIGNAL dr,dw,ad,cart_dr,cart_dw : uv16;
   SIGNAL cart_drl,cart_drh : uv8;
   SIGNAL cart_acc : std_logic;
   SIGNAL snd_dr,snd_dw,snd2_dr,snd2_dw : uv8;
   SIGNAL snd_wr,snd2_wr,cart_wr : std_logic;
+  SIGNAL ivoice_dr,ivoice_dw : uv16;
+  SIGNAL ivoice_wr,ivoice : std_logic;
+  SIGNAL ivoice_divi : uint9;
   SIGNAL sound,sound2 : sv8;
+  SIGNAL sound_iv : sv16;
   SIGNAL bdic : uv3;
   SIGNAL bdrdy,busrq,busak,halt,intrm : std_logic;
   SIGNAL pa_i,pb_i,pa_o,pb_o : uv8;
@@ -608,9 +624,10 @@ BEGIN
       ps2_mouse          => OPEN,
       ps2_mouse_ext      => OPEN);
   
-  ntsc_pal<=status(0);
+  pal<=status(0);
   swap<=status(1);
   ecs<=status(8);
+  ivoice<=NOT status(9);
   
   ----------------------------------------------------------
   ipll : pll
@@ -621,13 +638,23 @@ BEGIN
       outclk_1 => clksys_pal,  -- 4MHz * 12 = 48MHz
       locked   => pll_locked
       );
-  
+
+  --ialt : altclkctrl
+  --  PORT MAP (
+  --    clkselect => clkselect, 
+  --    ena       => '1',
+  --    inclk     => inclk,
+  --    outclk    => clksys);
+      
+  clkselect<=('1' & pal);
+  inclk<=(clksys_pal & clksys_ntsc & "00");
   clksys<=clksys_ntsc;
   
   -- NTSC : 3.579545MHz
   -- PAL  : 4MHz
-
+  
   -- STIC : CLK * 12
+  -- IVOICE : CLK
   Clepsydre:PROCESS(clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN
@@ -646,6 +673,14 @@ BEGIN
         IF clkdivsnd=0 THEN
           tick_snd<='1';
         END IF;
+      END IF;
+      
+      IF clkdivivoice=11 THEN
+        tick_ivoice<='1';
+        clkdivivoice<=0;
+      ELSE
+        tick_ivoice<='0';
+        clkdivivoice<=clkdivivoice+1;
       END IF;
     END IF;
   END PROCESS Clepsydre;
@@ -677,37 +712,42 @@ BEGIN
   -- STIC + SYSRAM + GRAM + GROM + Decoder
   i_stic: ENTITY work.stic
     PORT MAP (
-      dw       => dw,
-      dr       => dr,
-      bdic     => bdic,
-      bdrdy    => bdrdy,
-      busrq    => busrq,
-      busak    => busak,
-      intrm    => intrm,
-      phi      => tick_cpu,
-      ecs      => ecs,
-      ad       => ad,
-      snd_dr   => snd_dr,
-      snd_dw   => snd_dw,
-      snd_wr   => snd_wr,
-      snd2_dr  => snd2_dr,
-      snd2_dw  => snd2_dw,
-      snd2_wr  => snd2_wr,
-      cart_acc => cart_acc,
-      cart_dr  => cart_dr,
-      cart_dw  => cart_dw,
-      cart_wr  => cart_wr,
-      icart_dw => icart_dw,
-      icart_wr => icart_wr,
-      vid_r    => vga_r_i,
-      vid_g    => vga_g_i,
-      vid_b    => vga_b_i,
-      vid_de   => vga_de_i,
-      vid_hs   => vga_hs_i,
-      vid_vs   => vga_vs_i,
-      vid_ce   => vga_ce,
-      clk      => clksys,
-      reset_na => reset_na);
+      dw        => dw,
+      dr        => dr,
+      bdic      => bdic,
+      bdrdy     => bdrdy,
+      busrq     => busrq,
+      busak     => busak,
+      intrm     => intrm,
+      phi       => tick_cpu,
+      pal       => pal,
+      ecs       => ecs,
+      ivoice    => ivoice,
+      ad        => ad,
+      snd_dr    => snd_dr,
+      snd_dw    => snd_dw,
+      snd_wr    => snd_wr,
+      snd2_dr   => snd2_dr,
+      snd2_dw   => snd2_dw,
+      snd2_wr   => snd2_wr,
+      ivoice_dr => ivoice_dr,
+      ivoice_dw => ivoice_dw,
+      ivoice_wr => ivoice_wr,
+      cart_acc  => cart_acc,
+      cart_dr   => cart_dr,
+      cart_dw   => cart_dw,
+      cart_wr   => cart_wr,
+      icart_dw  => icart_dw,
+      icart_wr  => icart_wr,
+      vid_r     => vga_r_i,
+      vid_g     => vga_g_i,
+      vid_b     => vga_b_i,
+      vid_de    => vga_de_i,
+      vid_hs    => vga_hs_i,
+      vid_vs    => vga_vs_i,
+      vid_ce    => vga_ce,
+      clk       => clksys,
+      reset_na  => reset_na);
 
   -- AUDIO+IO AY-3-8914
   i_snd: ENTITY work.snd
@@ -744,11 +784,29 @@ BEGIN
       tick     => tick_snd,
       clk      => clksys,
       reset_na => reset_na);
+  
+  -- Intellivoice
+  i_ivoice: ENTITY work.ivoice
+    PORT MAP (
+      ad       => ad,
+      dw       => ivoice_dw,
+      dr       => ivoice_dr,
+      wr       => ivoice_wr,
+      tick_cpu => tick_cpu,
+      tick     => tick_ivoice,
+      divi     => ivoice_divi,
+      sound    => sound_iv,
+      clksys   => clksys,
+      reset_na => reset_na);
+  
+  ivoice_divi<=358 WHEN pal='0' ELSE 400;
 
-  audio_l<=std_logic_vector(sound) & x"00" WHEN ecs='0' ELSE
-           std_logic_vector(sound + sound2) & x"00";
-  audio_r<=std_logic_vector(sound) & x"00" WHEN ecs='0' ELSE
-           std_logic_vector(sound + sound2) & x"00";
+  audio_l<=std_logic_vector(sound + signed(mux(ecs,unsigned(sound2),x"00")) +
+    signed(mux(ivoice,unsigned(sound_iv(15 DOWNTO 8)),x"00")) & x"00");
+  
+  audio_r<=std_logic_vector(sound + signed(mux(ecs,unsigned(sound2),x"00")) +
+    signed(mux(ivoice,unsigned(sound_iv(15 DOWNTO 8)),x"00")) & x"00");
+  
   audio_s<='1';
   audio_mix<="11";
   
