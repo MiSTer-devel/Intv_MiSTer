@@ -136,6 +136,7 @@ BEGIN
         nro<="111";
         wreg<='1';
         ro<=dr;
+        ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         nri1<="111";
         
         --------------------------------
@@ -169,6 +170,7 @@ BEGIN
       WHEN sFETCH3 =>
         bdic_i<=B_DTB;
         op<=dr(9 DOWNTO 0);
+        ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         state<=sFETCH4;
         nri1<="111";
         
@@ -321,6 +323,9 @@ BEGIN
         nro<="111";
         ro<=ri1_r+1; -- Increment PC
         wreg<='1';
+        IF sdbd2_r='1' THEN
+          state<=sDIRECT3;
+        END IF;
         
       WHEN sDIRECT2 =>
         bdic_i<=B_NACT;
@@ -331,6 +336,7 @@ BEGIN
       WHEN sDIRECT3 =>
         bdic_i<=B_ADAR;
         dw_i<=dr;
+        ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         op2<=dr(9 DOWNTO 0);
         state<=sDIRECT4;
         
@@ -345,15 +351,36 @@ BEGIN
         nro<=op_r(2 DOWNTO 0);
         IF op_r(8 DOWNTO 6)="001" THEN -- MVO
           bdic_i<=B_DW;
-          dw_i<=ri2_r;
+          IF sdbd_r='1' THEN
+            dw_i<=x"00" & ri2_r(7 DOWNTO 0);
+          ELSIF sdbd2_r='1' THEN
+            dw_i<=x"00" & ri2_r(15 DOWNTO 8);
+          ELSE
+            dw_i<=ri2_r;
+          END IF;
           state<=sDIRECT_WRITE6;
         ELSE
           bdic_i<=B_DTB;
-          state<=sDIRECT6;
-          alu(op_r,dr,ri2_r,ro_v,szoc_r,szoc_v,false);
-          ro<=ro_v;
-          szoc<=szoc_v;
-          wreg<='1';
+          IF sdbd_r='1' THEN
+            op2<=dr(9 DOWNTO 0);
+            sdbd<='0';
+            sdbd2<=sdbd;
+            state<=sDIRECT1;
+          ELSIF sdbd2_r='1' THEN
+            ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
+            alu(op_r,dr(7 DOWNTO 0) & op2_r(7 DOWNTO 0),ri2_r,ro_v,szoc_r,szoc_v,false);
+            ro<=ro_v;
+            szoc<=szoc_v;
+            wreg<='1';
+            state<=sDIRECT6;
+          ELSE
+            ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
+            alu(op_r,dr,ri2_r,ro_v,szoc_r,szoc_v,false);
+            ro<=ro_v;
+            szoc<=szoc_v;
+            wreg<='1';
+            state<=sDIRECT6;
+          END IF;
         END IF;
         
       WHEN sDIRECT6 =>
@@ -365,12 +392,20 @@ BEGIN
         ELSE
           state<=sFETCH1;
         END IF;
+        sdbd2<=sdbd_r;
+        sdbd <='0';
         -- <MVO not interruptible ?>
         
       WHEN sDIRECT_WRITE6 =>
-        bdic_i<=B_DWS;
-        dw_i<=ri2_r;
         state<=sDIRECT6;
+        bdic_i<=B_DWS;
+        IF sdbd_r='1' THEN
+          dw_i<=x"00" & ri2_r(7 DOWNTO 0);
+        ELSIF sdbd2_r='1' THEN
+          dw_i<=x"00" & ri2_r(15 DOWNTO 8);
+        ELSE
+          dw_i<=ri2_r;
+        END IF;
         
         --------------------------------
       WHEN sINDIRECT1 =>
@@ -394,6 +429,9 @@ BEGIN
             END IF;
           WHEN OTHERS => NULL;
         END CASE;
+        IF sdbd2_r='1' THEN
+          state<=sINDIRECT3;
+        END IF;
         
       WHEN sINDIRECT2 =>
         bdic_i<=B_NACT;
@@ -416,11 +454,13 @@ BEGIN
         ELSE
           bdic_i<=B_DTB;
           IF sdbd_r='1' THEN
+            ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
             op2<=dr(9 DOWNTO 0);
             state<=sINDIRECT1;
             sdbd<='0';
             sdbd2<=sdbd_r;
           ELSIF sdbd2_r='1' THEN
+            ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
             alu(op_r,dr(7 DOWNTO 0) & op2_r(7 DOWNTO 0),ri2_r,ro_v,szoc_r,szoc_v,false);
             ro<=ro_v;
             nro<=op_r(2 DOWNTO 0);
@@ -428,6 +468,7 @@ BEGIN
             wreg<='1';
             state<=sINDIRECT4;
           ELSE
+            ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
             alu(op_r,dr,ri2_r,ro_v,szoc_r,szoc_v,false);
             ro<=ro_v;
             nro<=op_r(2 DOWNTO 0);
@@ -480,6 +521,7 @@ BEGIN
         
       WHEN sCBRANCH3 =>
         bdic_i<=B_DTB;
+        ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         disp<=dr;
         IF bcond(op_r,szoc_r,ebci) THEN
           state<=sCBRANCH4;
@@ -524,6 +566,7 @@ BEGIN
         
       WHEN sJUMP3 =>
         bdic_i<=B_DTB;
+        ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         op2<=dr(9 DOWNTO 0);
         state<=sJUMP4;
         
@@ -549,6 +592,7 @@ BEGIN
         
       WHEN sJUMP7 =>
         bdic_i<=B_DTB;
+        ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         op3<=dr(9 DOWNTO 0);
         state<=sJUMP8;
         nri1<="111";
@@ -612,6 +656,7 @@ BEGIN
       WHEN sINTR6 =>
         bdic_i<=B_IAB;
         nro<="111";
+        ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         ro<=dr;
         wreg<='1';
         state<=sINTR7;
@@ -791,6 +836,7 @@ BEGIN
     END PROCEDURE;
     -----------------------------------------------
     VARIABLE dpop : natural;
+    VARIABLE cccop : natural;
   BEGIN
     WAIT UNTIL reset_na='1';
     LOOP
@@ -800,7 +846,7 @@ BEGIN
       IF state_r=sFETCH4 THEN
         pc_v:=dw_i;
         dpop:=0;
-        
+        cccop:=ccnt-5;
         IF op_r(9 DOWNTO 0)="0000000100" THEN -- JUMP
           LOOP
             wure(clk);
@@ -866,14 +912,27 @@ BEGIN
               
               CASE op_r(5 DOWNTO 3) IS
                 WHEN "000" => -- Direct address
-                  LOOP
-                    wure(clk);
-                    EXIT WHEN state_r=sDIRECT5;
-                  END LOOP;
-                  write(csa,"@" & to_hstring("00" & op2_r) & ", ");
-                  write(csa,STR_REG(to_integer(op_r(2 DOWNTO 0))));
-                  write(csb,to_hstring("00" & op_r) & " " &
-                            to_hstring("00" & op2_r));
+                  IF sdbd='0' THEN
+                    LOOP
+                      wure(clk);
+                      EXIT WHEN state_r=sDIRECT5;
+                    END LOOP;
+                    write(csa,"@" & to_hstring("00" & op2_r) & ", ");
+                    write(csa,STR_REG(to_integer(op_r(2 DOWNTO 0))));
+                    write(csb,to_hstring("00" & op_r) & " " &
+                          to_hstring("00" & op2_r));
+                  ELSE
+                    LOOP
+                      wure(clk);
+                      EXIT WHEN state_r=sDIRECT5;
+                    END LOOP;
+                    write(csa,"@" & to_hstring(dr(7 DOWNTO 0) &
+                                               op2_r(7 DOWNTO 0)) & ", ");
+                    write(csa,STR_REG(to_integer(op_r(2 DOWNTO 0))));
+                    write(csb,to_hstring("00" & op_r) & " " &
+                          to_hstring("00" & op2_r(9 DOWNTO 0)) & " " &
+                          to_hstring("00" & dr(9 DOWNTO 0)));
+                  END IF;
                   dpop:=1;
                 WHEN "110" => -- STACK
                   IF op_r(8 DOWNTO 6)="001" THEN
@@ -940,7 +999,7 @@ BEGIN
         write(lout,STR_ISZOC(to_integer(
           unsigned'(NOT intm & szoc_r.s & szoc_r.z & szoc_r.o & szoc_r.c))));
         write(lout,string'("|  "));
-        write(lout,ccnt,LEFT,7); write(lout,string'("|"));
+        write(lout,cccop,LEFT,7); write(lout,string'("|"));
         IF dpop>0 THEN
           FOR i IN dpop-1 DOWNTO 0 LOOP
             IF acc(i)(0)='0' THEN
