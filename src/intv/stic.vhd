@@ -830,8 +830,8 @@ BEGIN
 
   ----------------------------------
   hdisp<=180    WHEN pal='0' ELSE 180;
-  hsync<=185    WHEN pal='0' ELSE 208;
-  hsyncend<=202 WHEN pal='0' ELSE 227;
+  hsync<=197    WHEN pal='0' ELSE 208;
+  hsyncend<=214 WHEN pal='0' ELSE 227;
   hlen <=228    WHEN pal='0' ELSE 256;
 
   vdisp<=240    WHEN pal='0' ELSE 288;
