@@ -145,7 +145,7 @@ ARCHITECTURE struct OF emu IS
     "O9,Voice,On,Off;" &
     "O3,Aspect ratio,4:3,16:9;" &
 --  "O46,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;" &
-    "O0,Video standard,NTSC,PAL;" &
+    "OA,Video standard,NTSC,PAL;" &
     "O1,Swap Joystick,Off,On;" &
     "O2,Overlay,Off,On;" &
     "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;" &
@@ -308,7 +308,8 @@ ARCHITECTURE struct OF emu IS
   SIGNAL pa_en,pb_en,pa2_en,pb2_en : std_logic;
   SIGNAL map_reset : std_logic;
   SIGNAL map_cpt : uint4;
-
+  SIGNAL clear : std_logic;
+  
   -- OVO -----------------------------------------
   FUNCTION CC(i : character) RETURN unsigned IS
   BEGIN
@@ -559,7 +560,6 @@ ARCHITECTURE struct OF emu IS
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
   
   ----------------------------------------------------------
-  
 BEGIN
 
   hps : hps_io
@@ -624,7 +624,7 @@ BEGIN
       ps2_mouse          => OPEN,
       ps2_mouse_ext      => OPEN);
   
-  pal<=status(0);
+  pal<=status(10);
   swap<=status(1);
   ecs<=status(8);
   ivoice<=NOT status(9);
@@ -723,6 +723,7 @@ BEGIN
       pal       => pal,
       ecs       => ecs,
       ivoice    => ivoice,
+      clear     => clear,
       ad        => ad,
       snd_dr    => snd_dr,
       snd_dw    => snd_dw,
@@ -960,6 +961,7 @@ BEGIN
       icart_fine_dwr<='0';
       
       ioctl_wait<=ioctl_wr;
+      clear<='0';
       
       ------------------------------------------------------
       CASE state IS
@@ -972,6 +974,7 @@ BEGIN
           END IF;
           
         WHEN sCLR =>
+          clear<='1';
           ioctl_wait<='1';
           w_d<=x"FF";
           w_wrl<='1';
@@ -1203,7 +1206,7 @@ BEGIN
   PROCESS (key_1,key_2,key_3,key_4,key_5,key_6,key_7,key_8,key_9,
            key_0,key_r,key_w,key_space,key_enter,swap,
            joystick_0,joystick_1,joystick_analog_0,joystick_analog_1) IS
-    CONSTANT dirtable : arr_uv8(0 TO 15):= (-- NDLR
+    CONSTANT dirtable : arr_uv8(0 TO 15):= (-- NSWE
       x"00", -- 0000 : no press
       x"02", -- 0001 : E
       x"08", -- 0010 : W
@@ -1240,6 +1243,7 @@ BEGIN
       x"16",x"16",x"16",x"06",x"06",x"02",x"02",x"02",x"02",x"02",x"02",x"12",x"12",x"13",x"13",x"13");
     
     VARIABLE io_v,io2_v : uv8;
+    VARIABLE t_v : std_logic_vector(3 DOWNTO 0);
   BEGIN
     -- PORT A
     io_v:=dirtable(to_integer(unsigned(joystick_0(3 DOWNTO 0)))); -- Direction cross
@@ -1251,15 +1255,36 @@ BEGIN
     io_v:=io_v OR ("10001000" AND sext(joystick_0( 7),8)); -- Clear
     io_v:=io_v OR ("00101000" AND sext(joystick_0( 8),8)); -- Enter 
     io_v:=io_v OR ("01001000" AND sext(joystick_0( 9),8)); -- 0
-    io_v:=io_v OR ("10000001" AND sext(joystick_0(10),8));
-    io_v:=io_v OR ("01000001" AND sext(joystick_0(11),8));
-    io_v:=io_v OR ("00100001" AND sext(joystick_0(12),8));
-    io_v:=io_v OR ("10000010" AND sext(joystick_0(13),8));
-    io_v:=io_v OR ("01000010" AND sext(joystick_0(14),8));
-    io_v:=io_v OR ("00100010" AND sext(joystick_0(15),8));
-    io_v:=io_v OR ("10000100" AND sext(joystick_0(16),8));
-    io_v:=io_v OR ("01000100" AND sext(joystick_0(17),8));
-    io_v:=io_v OR ("00100100" AND sext(joystick_0(18),8));
+    io_v:=io_v OR ("10000001" AND sext(joystick_0(10),8)); -- 1
+    io_v:=io_v OR ("01000001" AND sext(joystick_0(11),8)); -- 2
+    io_v:=io_v OR ("00100001" AND sext(joystick_0(12),8)); -- 3
+    io_v:=io_v OR ("10000010" AND sext(joystick_0(13),8)); -- 4
+    io_v:=io_v OR ("01000010" AND sext(joystick_0(14),8)); -- 5
+    io_v:=io_v OR ("00100010" AND sext(joystick_0(15),8)); -- 6
+    io_v:=io_v OR ("10000100" AND sext(joystick_0(16),8)); -- 7
+    io_v:=io_v OR ("01000100" AND sext(joystick_0(17),8)); -- 8
+    io_v:=io_v OR ("00100100" AND sext(joystick_0(18),8)); -- 9
+
+    t_v:=key_up & key_down & key_left & key_right;
+    IF ecs='0' THEN
+      io_v:=io_v OR dirtable(to_integer(unsigned(t_v)));
+      io_v:=io_v OR ("10100000" AND sext(key_lctrl,8)); -- Action UP
+      io_v:=io_v OR ("10100000" AND sext(key_rctrl,8)); -- Action UP
+      io_v:=io_v OR ("01100000" AND sext(key_lshift,8)); -- Action BL
+      io_v:=io_v OR ("11000000" AND sext(key_rshift,8)); -- Action BR
+      io_v:=io_v OR ("10001000" AND sext(key_space,8)); -- Clear
+      io_v:=io_v OR ("00101000" AND sext(key_enter,8)); -- Enter 
+      io_v:=io_v OR ("01001000" AND sext(key_0,8)); -- 0
+      io_v:=io_v OR ("10000001" AND sext(key_1,8)); -- 1
+      io_v:=io_v OR ("01000001" AND sext(key_2,8)); -- 2
+      io_v:=io_v OR ("00100001" AND sext(key_3,8)); -- 3
+      io_v:=io_v OR ("10000010" AND sext(key_4,8)); -- 4
+      io_v:=io_v OR ("01000010" AND sext(key_5,8)); -- 5
+      io_v:=io_v OR ("00100010" AND sext(key_6,8)); -- 6
+      io_v:=io_v OR ("10000100" AND sext(key_7,8)); -- 7
+      io_v:=io_v OR ("01000100" AND sext(key_8,8)); -- 8
+      io_v:=io_v OR ("00100100" AND sext(key_9,8)); -- 9
+    END IF;
     
     ---------------------------------
     -- PORT B
@@ -1272,15 +1297,15 @@ BEGIN
     io2_v:=io2_v OR ("10001000" AND sext(joystick_1( 7),8)); -- Clear
     io2_v:=io2_v OR ("00101000" AND sext(joystick_1( 8),8)); -- Enter 
     io2_v:=io2_v OR ("01001000" AND sext(joystick_1( 9),8)); -- 0
-    io2_v:=io2_v OR ("10000001" AND sext(joystick_1(10),8));
-    io2_v:=io2_v OR ("01000001" AND sext(joystick_1(11),8));
-    io2_v:=io2_v OR ("00100001" AND sext(joystick_1(12),8));
-    io2_v:=io2_v OR ("10000010" AND sext(joystick_1(13),8));
-    io2_v:=io2_v OR ("01000010" AND sext(joystick_1(14),8));
-    io2_v:=io2_v OR ("00100010" AND sext(joystick_1(15),8));
-    io2_v:=io2_v OR ("10000100" AND sext(joystick_1(16),8));
-    io2_v:=io2_v OR ("01000100" AND sext(joystick_1(17),8));
-    io2_v:=io2_v OR ("00100100" AND sext(joystick_1(18),8));
+    io2_v:=io2_v OR ("10000001" AND sext(joystick_1(10),8)); -- 1
+    io2_v:=io2_v OR ("01000001" AND sext(joystick_1(11),8)); -- 2
+    io2_v:=io2_v OR ("00100001" AND sext(joystick_1(12),8)); -- 3
+    io2_v:=io2_v OR ("10000010" AND sext(joystick_1(13),8)); -- 4
+    io2_v:=io2_v OR ("01000010" AND sext(joystick_1(14),8)); -- 5
+    io2_v:=io2_v OR ("00100010" AND sext(joystick_1(15),8)); -- 6
+    io2_v:=io2_v OR ("10000100" AND sext(joystick_1(16),8)); -- 7
+    io2_v:=io2_v OR ("01000100" AND sext(joystick_1(17),8)); -- 8
+    io2_v:=io2_v OR ("00100100" AND sext(joystick_1(18),8)); -- 9
     
     pa_i<=NOT mux(swap,io_v,io2_v);
     pb_i<=NOT mux(swap,io2_v,io_v);

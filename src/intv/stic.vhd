@@ -58,6 +58,7 @@ ENTITY stic IS
     pal    : IN  std_logic;
     ecs    : IN  std_logic;
     ivoice : IN  std_logic;
+    clear  : IN  std_logic;
     
     ------------------------------------
     ad     : OUT uv16;
@@ -394,7 +395,8 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL pr_execrom,pr_ecsrom : uv16;
   
   SIGNAL prd,pwr : std_logic;
-  SIGNAL padrs  : uint16;
+  SIGNAL padrs,padrsc  : uint16;
+  SIGNAL clra : std_logic;
   SIGNAL csmode : std_logic;
   SIGNAL cscpt : uint2;
 
@@ -420,6 +422,8 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL r_x,r_x2,r_y,r_y2,r_a,r_a2 : uv14;
   SIGNAL r_gram,r_grom : uv8;
   SIGNAL r_sysram : uv16;
+
+  SIGNAL dwi : uv16;
   
   CONSTANT GROM : arr8(0 TO 2047) := INIT_GROM;
   
@@ -435,28 +439,23 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL bank : arr_uv4(0 TO 15);
   
   CONSTANT PALETTE : arr_uv24(0 TO 15) := -- RRGGBB
-    (x"0C0005",x"002DFF",x"FF3E00",x"C9D464", -- 8 primAry
+    (x"0C0005",x"002DFF",x"FF3E00",x"C9D464", -- 8 primary
      x"00780F",x"00A720",x"FAEA27",x"FFFCFF",
      x"A7A8A8",x"5ACBFF",x"FFA600",x"3C5800", -- 8 pastels
      x"FF3276",x"BD95FF",x"6CCD30",x"C81A7D");
 
   SIGNAL xxx_hit : boolean;
   SIGNAL xxx_pix : type_col;
+  
 BEGIN
   
   ------------------------------------------------------------------------------
-  RegAcc:PROCESS (clk,reset_na) IS
+  dwi<=dw WHEN clear='0' ELSE x"0000";
+  
+  ------------------------------------------------------------------------------
+  Adrs:PROCESS (clk) IS
   BEGIN
-    IF reset_na='0' THEN
-      delay_v<="000";
-      delay_h<="000";
-      border<="0000";
-      bext_t<='0';
-      bext_l<='0';
-      csmode<='0';
-      bank<=(OTHERS =>x"0");
-      
-    ELSIF rising_edge(clk) THEN
+    IF rising_edge(clk) THEN
       ----------------------------------
       pwr<='0';
       prd<='0';
@@ -469,14 +468,47 @@ BEGIN
       ELSIF bdic=B_DTB THEN
         prd<='1';
       END IF;
+
+      ----------------------------------
+      -- Clear RAM
+      IF clear='1' THEN
+        clra<=NOT clra;        
+        IF clra='1' THEN
+          pwr<='1';
+          padrsc<=padrsc+1;
+          IF padrsc=16#03FF# THEN
+            padrsc<=16#0100#; -- Scratch RAM
+          ELSIF padrsc=16#01EF# THEN
+            padrsc<=16#3800#; -- GRAM
+          ELSIF padrsc=16#3FFF# THEN
+            padrsc<=16#4040#; -- ECSRAM
+          ELSIF padrsc=16#47FF# THEN
+            padrsc<=16#0200#; -- SYSRAM
+          END IF;
+          padrs<=padrsc;
+        END IF;
+      ELSE
+        padrsc<=0;
+        clra<='0';
+      END IF;
+      ----------------------------------
       
+    END IF;
+  END PROCESS Adrs;
+  
+  ------------------------------------------------------------------------------
+  RegAcc:PROCESS (clk,reset_na) IS
+  BEGIN
+    IF rising_edge(clk) THEN
       ----------------------------------
       pwr_x<='0';
       pwr_y<='0';
       pwr_a<='0';
       pwr_c<='0';
       pwr_sysram<='0';
+      pwr_ecsram<='0';
       pwr_gram<='0';
+      pwr_scram<='0';
 
       snd_wr<='0';
       snd2_wr<='0';
@@ -686,35 +718,36 @@ BEGIN
       
       ----------------------------------
       bdrdy<='1';
-      
+      ----------------------------------
+      IF reset_na='0' THEN
+        delay_v<="000";
+        delay_h<="000";
+        border<="0000";
+        bext_t<='0';
+        bext_l<='0';
+        csmode<='0';
+        bank<=(OTHERS =>x"0");
+        de<='1';
+      END IF;
     END IF;
   END PROCESS RegAcc;
-
+  
   ------------------------------------------------------------------------------
-  Mem:PROCESS (clk,reset_na) IS
+  Mem:PROCESS (clk) IS
     VARIABLE ad_v : uint16;
   BEGIN
-    IF reset_na='0' THEN
-      mobx<=(OTHERS =>"00000000000000");
-      moby<=(OTHERS =>"00000000000000");
-      moba<=(OTHERS =>"00000000000000");
-      mobc<=(OTHERS =>"00000000000000");
+    IF rising_edge(clk) THEN
+      IF pwr_sysram='1' THEN sysram(padrs MOD 512)<=dwi(15 DOWNTO 0); END IF;
+      IF pwr_ecsram='1' THEN ecsram(padrs MOD 2048)<=dwi(7 DOWNTO 0); END IF;
+      IF pwr_gram='1'   THEN gram(padrs MOD 512)<=dwi(7 DOWNTO 0); END IF;
+      IF pwr_scram='1'  THEN scram(padrs MOD 256)<=dwi(7 DOWNTO 0); END IF;
       
-    ELSIF rising_edge(clk) THEN
-
-      --------------------------
-      -- CPU Access
-      pr_x<=mobx(padrs MOD 8);
-      pr_y<=moby(padrs MOD 8);
-      pr_a<=moba(padrs MOD 8);
-      pr_c<=mobc(padrs MOD 8);
-      pr_sysram<=sysram(padrs MOD 512);
-      pr_ecsram<=ecsram(padrs MOD 2048);
-      pr_grom  <=GROM(padrs MOD 2048);
-      pr_gram  <=gram(padrs MOD 512);
-      pr_scram <=scram(padrs MOD 256);
-      
-      pr_execrom  <=EXECROM(padrs MOD 4096);
+      pr_sysram <=sysram(padrs MOD 512);
+      pr_ecsram <=ecsram(padrs MOD 2048);
+      pr_gram   <=gram(padrs MOD 512);
+      pr_scram  <=scram(padrs MOD 256);
+      pr_grom   <=GROM(padrs MOD 2048);
+      pr_execrom<=EXECROM(padrs MOD 4096);
       
       IF padrs>=16#2000# AND padrs<=16#2FFF# THEN
         ad_v:=padrs - 16#2000#;
@@ -726,6 +759,30 @@ BEGIN
         ad_v:=padrs MOD 4096;
       END IF;
       pr_ecsrom<=ECSROM(ad_v);
+      
+      r_gram <=gram(a_gmem MOD 512);
+      r_sysram<=sysram(a_sysram);
+      r_grom <=GROM(a_gmem MOD 2048);
+      
+    END IF;
+  END PROCESS Mem;
+  
+  ------------------------------------------------------------------------------
+  Mobs:PROCESS (clk,reset_na) IS
+  BEGIN
+    IF reset_na='0' THEN
+      mobx<=(OTHERS =>"00000000000000");
+      moby<=(OTHERS =>"00000000000000");
+      moba<=(OTHERS =>"00000000000000");
+      mobc<=(OTHERS =>"00000000000000");
+      
+    ELSIF rising_edge(clk) THEN
+      --------------------------
+      -- CPU Access
+      pr_x<=mobx(padrs MOD 8);
+      pr_y<=moby(padrs MOD 8);
+      pr_a<=moba(padrs MOD 8);
+      pr_c<=mobc(padrs MOD 8);
       
       -- Set collision bits
       FOR i IN 0 TO 7 LOOP
@@ -742,11 +799,6 @@ BEGIN
       IF pwr_a='1' THEN moba(padrs MOD 8)<=dw(13 DOWNTO 0); END IF;
       IF pwr_c='1' THEN mobc(padrs MOD 8)<=dw(13 DOWNTO 0); END IF;
       
-      IF pwr_sysram='1' THEN sysram(padrs MOD 512)<=dw(15 DOWNTO 0); END IF;
-      IF pwr_ecsram='1' THEN ecsram(padrs MOD 2048)<=dw(7 DOWNTO 0); END IF;
-      IF pwr_gram='1'   THEN gram(padrs MOD 512)<=dw(7 DOWNTO 0); END IF;
-      IF pwr_scram='1'  THEN scram(padrs MOD 256)<=dw(7 DOWNTO 0); END IF;
-
       -- Clear self-collision bit
       FOR i IN 0 TO 7 LOOP
         mobc(i)(i)<='0';
@@ -757,21 +809,14 @@ BEGIN
       r_x<=mobx(a_mob);
       r_y<=moby(a_mob);
       r_a<=moba(a_mob);
-      r_sysram<=sysram(a_sysram);
-
       
       r_x2<=r_x;
       r_y2<=r_y;
       r_a2<=r_a;
       
-      r_gram <=gram(a_gmem MOD 512);
-      r_grom <=GROM(a_gmem MOD 2048);
-      
-      --------------------------
-      
     END IF;
-  END PROCESS Mem;
-
+  END PROCESS Mobs;
+  
   ad<=to_unsigned(padrs,16);
   
   ------------------------------------------------------------------------------
@@ -885,6 +930,10 @@ BEGIN
           END IF;
           IF hpos=0 AND vpos = 9 THEN
             intrm_i<='0';
+          END IF;
+          IF de='0' THEN
+            hpos<=0;
+            vpos<=0;
           END IF;
           
         WHEN 1 => NULL;
@@ -1015,6 +1064,7 @@ BEGIN
          (vpos=VSTART+1+16*12 + to_integer(delay_v) AND hpos=176) THEN
         busrq<='0';
       END IF;
+      busrq<='0';
     END IF;
   END PROCESS Sync;
 
