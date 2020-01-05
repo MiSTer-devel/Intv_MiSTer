@@ -960,7 +960,7 @@ BEGIN
           IF r_sysram(13)='1' AND csmode='1' AND
             r_sysram(12 DOWNTO 11)/="10" AND
             (hpos - HSTART - to_integer(delay_h)) MOD 8=0 AND
-            visible(hpos,vpos,bext_l,bext_t)
+            visible(hpos,vpos,'0','0')
           THEN -- Advance colour stack counter
             cpt_v:=(cstack_cpt+1) MOD 4;
             cstack_cpt<=cpt_v;
