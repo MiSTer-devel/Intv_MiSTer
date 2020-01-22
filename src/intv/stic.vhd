@@ -874,15 +874,15 @@ BEGIN
   END PROCESS MemAdrs;
 
   ----------------------------------
-  hdisp<=180    WHEN pal='0' ELSE 180;
-  hsync<=197    WHEN pal='0' ELSE 208;
-  hsyncend<=214 WHEN pal='0' ELSE 227;
+  hdisp<=190    WHEN pal='0' ELSE 195;
+  hsync<=194    WHEN pal='0' ELSE 205;
+  hsyncend<=207 WHEN pal='0' ELSE 230;
   hlen <=228    WHEN pal='0' ELSE 256;
 
-  vdisp<=240    WHEN pal='0' ELSE 288;
-  vsync<=242    WHEN pal='0' ELSE 290;
-  vsyncend<=245 WHEN pal='0' ELSE 293;
-  vlen <=262    WHEN pal='0' ELSE 312;
+  vdisp<=240    WHEN pal='0' ELSE 240;
+  vsync<=242    WHEN pal='0' ELSE 267;
+  vsyncend<=246 WHEN pal='0' ELSE 271;
+  vlen <=262    WHEN pal='0' ELSE 313;
   
   ------------------------------------------------------------------------------
   Sync:PROCESS(clk,reset_na) IS
@@ -931,10 +931,10 @@ BEGIN
           IF hpos=0 AND vpos = 9 THEN
             intrm_i<='0';
           END IF;
-          IF de='0' THEN
-            hpos<=0;
-            vpos<=0;
-          END IF;
+          --IF de='0' THEN
+          --  hpos<=0;
+          --  vpos<=0;
+          --END IF;
           
         WHEN 1 => NULL;
           
@@ -1064,7 +1064,7 @@ BEGIN
          (vpos=VSTART+1+16*12 + to_integer(delay_v) AND hpos=176) THEN
         busrq<='0';
       END IF;
-      busrq<='0';
+      
     END IF;
   END PROCESS Sync;
 

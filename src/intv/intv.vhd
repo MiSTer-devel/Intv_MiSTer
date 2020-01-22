@@ -639,22 +639,22 @@ BEGIN
       locked   => pll_locked
       );
 
-  --ialt : altclkctrl
-  --  PORT MAP (
-  --    clkselect => clkselect, 
-  --    ena       => '1',
-  --    inclk     => inclk,
-  --    outclk    => clksys);
+  ialt : altclkctrl
+    PORT MAP (
+      clkselect => clkselect, 
+      ena       => '1',
+      inclk     => inclk,
+      outclk    => clksys);
       
   clkselect<=('1' & pal);
   inclk<=(clksys_pal & clksys_ntsc & "00");
-  clksys<=clksys_ntsc;
   
   -- NTSC : 3.579545MHz
   -- PAL  : 4MHz
   
   -- STIC : CLK * 12
   -- IVOICE : CLK
+  
   Clepsydre:PROCESS(clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN
