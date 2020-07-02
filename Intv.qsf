@@ -297,9 +297,12 @@ set_location_assignment PIN_AG23 -to BTN_RESET
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to LED_*
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to BTN_*
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to BTN_*
-source files.qip
 set_global_assignment -name VHDL_INPUT_VERSION VHDL_1993
 set_global_assignment -name VHDL_SHOW_LMF_MAPPING_MESSAGES OFF
+source files.qip
+
+
+set_global_assignment -name QIP_FILE sys/pll.qip
 set_global_assignment -name VHDL_FILE src/intv/ivoice.vhd
 set_global_assignment -name VHDL_FILE src/intv/rom_pack.vhd
 set_global_assignment -name VHDL_FILE src/intv/cp1610.vhd
@@ -309,6 +312,7 @@ set_global_assignment -name VHDL_FILE src/intv/snd.vhd
 set_global_assignment -name VHDL_FILE src/intv/stic.vhd
 set_global_assignment -name VHDL_FILE src/base/base_pack.vhd
 set_global_assignment -name VHDL_FILE src/base/ovo.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE intv.sv
 set_global_assignment -name CDF_FILE jtag.cdf
 set_global_assignment -name QIP_FILE sys/sys.qip
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
