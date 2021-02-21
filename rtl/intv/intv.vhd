@@ -16,13 +16,14 @@ USE work.base_pack.ALL;
 ENTITY intv_core IS
   PORT (
     clksys           : IN    std_logic;
-	 pll_locked       : IN    std_logic;
+    pll_locked       : IN    std_logic;
     
     pal              : IN    std_logic;
     swap             : IN    std_logic;
     ecs              : IN    std_logic;
     ivoice           : IN    std_logic;
-    
+    mapp             : IN    std_logic_vector(3 DOWNTO 0);
+    ovo_ena          : IN    std_logic;
     reset            : IN    std_logic;
     
     -- VGA
@@ -40,7 +41,6 @@ ENTITY intv_core IS
     joystick_1        : IN  unsigned(31 DOWNTO 0);
     joystick_analog_0 : IN  unsigned(15 DOWNTO 0);
     joystick_analog_1 : IN  unsigned(15 DOWNTO 0);
-    status            : IN  unsigned(31 DOWNTO 0);
     ioctl_download    : IN  std_logic;
     ioctl_index       : IN  std_logic_vector(7 DOWNTO 0);
     ioctl_wr          : IN  std_logic;
@@ -59,25 +59,6 @@ ARCHITECTURE struct OF intv_core IS
 
   CONSTANT CDIV : natural := 12 * 8;
   
-  COMPONENT pll IS
-    PORT (
-      refclk   : in  std_logic; -- clk
-      rst      : in  std_logic; -- reset
-      outclk_0 : out std_logic; -- clk
-      outclk_1 : out std_logic; -- clk
-      locked   : out std_logic  -- export
-      );
-  END COMPONENT pll;
-
-  COMPONENT altclkctrl IS
-    PORT (
-      clkselect : IN std_logic_vector(1 DOWNTO 0);
-      ena       : IN std_logic;
-      inclk     : IN std_logic_vector(3 DOWNTO 0);
-      outclk    : OUT std_logic
-      );
-  END COMPONENT altclkctrl;
-
   SIGNAL inclk : std_logic_vector(3 DOWNTO 0);
   SIGNAL clkselect : std_logic_vector(1 DOWNTO 0);
   
@@ -197,7 +178,6 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL vga_hs_i,vga_vs_i : std_logic;
   SIGNAL vga_de_i,vga_ce_l,vga_ce2,vga_ce3,vga_ce4,vga_ce5  : std_logic;
   
-  SIGNAL ovo_ena  : std_logic;
   SIGNAL ovo_in0  : unsigned(0 TO 32*5-1) :=(OTHERS =>'0');
   SIGNAL ovo_in1  : unsigned(0 TO 32*5-1) :=(OTHERS =>'0');
   
@@ -570,10 +550,10 @@ BEGIN
       ------------------------------------------------------
       IF icart='1' THEN
         mmap<=15;
-      ELSIF status(7 DOWNTO 4)="0000" THEN
+      ELSIF mapp="0000" THEN
         mmap<=mux(found='1',smap,0);
       ELSE
-        mmap<=to_integer(unsigned(status(7 DOWNTO 4)))-1;
+        mmap<=to_integer(unsigned(mapp))-1;
       END IF;
       
       mmap2<=mmap;
@@ -1277,8 +1257,6 @@ BEGIN
             '0' & xcrc(7 DOWNTO 4) &
             '0' & xcrc(3 DOWNTO 0) &
             CS("            ");
-  
-  ovo_ena<=status(2);
   
   ----------------------------------------------------------
   reset_na<=NOT reset AND pll_locked AND NOT ioctl_download AND NOT map_reset;

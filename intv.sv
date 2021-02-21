@@ -18,86 +18,87 @@
 
 module emu
 (
-     input         CLK_50M,
-     input         RESET,
-     inout  [45:0] HPS_BUS,
+    input         CLK_50M,
 
-     //Video
-     output        CLK_VIDEO,
-     output        CE_PIXEL,
+    input         RESET,
 
-     output  [7:0] VIDEO_ARX,
-     output  [7:0] VIDEO_ARY,
+    inout  [45:0] HPS_BUS,
 
-     output  [7:0] VGA_R,
-     output  [7:0] VGA_G,
-     output  [7:0] VGA_B,
-     output        VGA_HS,
-     output        VGA_VS,
-     output        VGA_DE,    // = ~(VBlank | HBlank)
-     output        VGA_F1,
-     output [1:0]  VGA_SL,
-     
-     output        LED_USER,  // 1 - ON, 0 - OFF.
-     output  [1:0] LED_POWER,
-     output  [1:0] LED_DISK,
+    output        CLK_VIDEO,
 
-     output  [1:0] BUTTONS,
+    output        CE_PIXEL,
 
-     input         CLK_AUDIO, // 24.576 MHz
-     output [15:0] AUDIO_L,
-     output [15:0] AUDIO_R,
-     output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
-     output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
+    output [11:0] VIDEO_ARX,
+    output [11:0] VIDEO_ARY,
 
-     //ADC
-     inout   [3:0] ADC_BUS,
+    output  [7:0] VGA_R,
+    output  [7:0] VGA_G,
+    output  [7:0] VGA_B,
+    output        VGA_HS,
+    output        VGA_VS,
+    output        VGA_DE,    // = ~(VBlank | HBlank)
+    output        VGA_F1,
+    output [1:0]  VGA_SL,
+    output        VGA_SCALER, // Force VGA scaler
 
-     //SD-SPI
-     output        SD_SCK,
-     output        SD_MOSI,
-     input         SD_MISO,
-     output        SD_CS,
-     input         SD_CD,
+    input  [11:0] HDMI_WIDTH,
+    input  [11:0] HDMI_HEIGHT,
 
-     //DDR3
-     output        DDRAM_CLK,
-     input         DDRAM_BUSY,
-     output  [7:0] DDRAM_BURSTCNT,
-     output [28:0] DDRAM_ADDR,
-     input  [63:0] DDRAM_DOUT,
-     input         DDRAM_DOUT_READY,
-     output        DDRAM_RD,
-     output [63:0] DDRAM_DIN,
-     output  [7:0] DDRAM_BE,
-     output        DDRAM_WE,
+    output        LED_USER,  // 1 - ON, 0 - OFF.
 
-     //SDRAM
-     output        SDRAM_CLK,
-     output        SDRAM_CKE,
-     output [12:0] SDRAM_A,
-     output  [1:0] SDRAM_BA,
-     inout  [15:0] SDRAM_DQ,
-     output        SDRAM_DQML,
-     output        SDRAM_DQMH,
-     output        SDRAM_nCS,
-     output        SDRAM_nCAS,
-     output        SDRAM_nRAS,
-     output        SDRAM_nWE,
+    output  [1:0] LED_POWER,
+    output  [1:0] LED_DISK,
 
-     //UART
-     input         UART_CTS,
-     output        UART_RTS,
-     input         UART_RXD,
-     output        UART_TXD,
-     output        UART_DTR,
-     input         UART_DSR,
+    output  [1:0] BUTTONS,
 
-     // Open-drain User port.
-     input   [6:0] USER_IN,
-     output  [6:0] USER_OUT,
+    input         CLK_AUDIO, // 24.576 MHz
+    output [15:0] AUDIO_L,
+    output [15:0] AUDIO_R,
+    output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
+    output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
 
-     input         OSD_STATUS
+    inout   [3:0] ADC_BUS,
+
+    output        SD_SCK,
+    output        SD_MOSI,
+    input         SD_MISO,
+    output        SD_CS,
+    input         SD_CD,
+
+    output        DDRAM_CLK,
+    input         DDRAM_BUSY,
+    output  [7:0] DDRAM_BURSTCNT,
+    output [28:0] DDRAM_ADDR,
+    input  [63:0] DDRAM_DOUT,
+    input         DDRAM_DOUT_READY,
+    output        DDRAM_RD,
+    output [63:0] DDRAM_DIN,
+    output  [7:0] DDRAM_BE,
+    output        DDRAM_WE,
+
+    output        SDRAM_CLK,
+    output        SDRAM_CKE,
+    output [12:0] SDRAM_A,
+    output  [1:0] SDRAM_BA,
+    inout  [15:0] SDRAM_DQ,
+    output        SDRAM_DQML,
+    output        SDRAM_DQMH,
+    output        SDRAM_nCS,
+    output        SDRAM_nCAS,
+    output        SDRAM_nRAS,
+    output        SDRAM_nWE,
+
+    input         UART_CTS,
+    output        UART_RTS,
+    input         UART_RXD,
+    output        UART_TXD,
+    output        UART_DTR,
+    input         UART_DSR,
+
+    input   [6:0] USER_IN,
+    output  [6:0] USER_OUT,
+
+    input         OSD_STATUS
 );
 
 //////////////////////////////////////////////////////////////////
@@ -122,8 +123,10 @@ assign BUTTONS = 0;
 
 //////////////////////////////////////////////////////////////////
 
-assign VIDEO_ARX = status[3] ? 8'd16 : 8'd4;
-assign VIDEO_ARY = status[3] ? 8'd9  : 8'd3; 
+wire [1:0] ar = status[4:3];
+
+assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
+assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
 
 `include "build_id.v"
 
@@ -131,11 +134,11 @@ localparam CONF_STR = {
     "Intellivision;;",
     "-;",
     "FS,ROMINT;",
-    "O47,MAP,Auto,0,1,2,3,4,5,6,7,8,9",
-    "O8,ECS,Off,On;",
-    "O9,Voice,On,Off;",
-    "O3,Aspect ratio,4:3,16:9;",
-    "OA,Video standard,NTSC,PAL;",
+    "O58,MAP,Auto,0,1,2,3,4,5,6,7,8,9;",
+    "O9,ECS,Off,On;",
+    "OA,Voice,On,Off;",
+    "O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+    "OB,Video standard,NTSC,PAL;",
     "O1,Swap Joystick,Off,On;",
     "O2,Overlay,Off,On;",
     "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;",
@@ -181,11 +184,12 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 wire clk_sys,pll_locked;
 
-wire pal    = status[10];
-wire swap   = status[1];
-wire ecs    = status[8];
-wire ivoice =!status[9];
-
+wire pal     = status[11];
+wire swap    = status[1];
+wire ecs     = status[9];
+wire ivoice  =!status[10];
+wire mapp    = status[8:5];
+wire ovo_ena = status[2];
 intv_core intv_core
 (
     .clksys(clk_sys),
@@ -194,6 +198,8 @@ intv_core intv_core
     .swap(swap),
     .ecs(ecs),
     .ivoice(ivoice),
+    .mapp(mapp),
+    .ovo_ena(ovo_ena),
     .reset(RESET | status[0]),
     .vga_clk(CLK_VIDEO),
     .vga_ce(CE_PIXEL),
@@ -207,7 +213,6 @@ intv_core intv_core
     .joystick_1(joystick_1),
     .joystick_analog_0(joystick_analog_0),
     .joystick_analog_1(joystick_analog_1),
-    .status(status),
     .ioctl_download(ioctl_download),
     .ioctl_index(ioctl_index),
     .ioctl_wr(ioctl_wr),
