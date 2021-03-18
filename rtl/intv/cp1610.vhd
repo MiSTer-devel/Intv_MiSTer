@@ -57,7 +57,7 @@ ARCHITECTURE rtl OF cp1610 IS
      sEXEC_ALUR1,sEXEC_ALUR2,sEXEC_ALUR3,
      sEXEC_SHIFT1,sEXEC_SHIFT2,sEXEC_SHIFT3,sEXEC_SHIFT4,
      sDIRECT1,sDIRECT2,sDIRECT3,sDIRECT4,sDIRECT5,sDIRECT6,
-     sDIRECT_WRITE6,
+     sDIRECT_WRITE6,sDIRECT_WRITE7,
      sINDIRECT1,sINDIRECT2,sINDIRECT3,sINDIRECT4,sINDIRECT_WRITE4,
      sCBRANCH1,sCBRANCH2,sCBRANCH3,sCBRANCH4,sCBRANCH5,
      sJUMP1,sJUMP2,sJUMP3,sJUMP4,sJUMP5,sJUMP6,sJUMP7,sJUMP8,
@@ -394,10 +394,9 @@ BEGIN
         END IF;
         sdbd2<=sdbd_r;
         sdbd <='0';
-        -- <MVO not interruptible ?>
         
       WHEN sDIRECT_WRITE6 =>
-        state<=sDIRECT6;
+        state<=sDIRECT_WRITE7;
         bdic_i<=B_DWS;
         IF sdbd_r='1' THEN
           dw_i<=x"00" & ri2_r(7 DOWNTO 0);
@@ -406,6 +405,13 @@ BEGIN
         ELSE
           dw_i<=ri2_r;
         END IF;
+
+      WHEN sDIRECT_WRITE7 =>
+        -- MVO not interruptible
+        bdic_i<=B_NACT;
+        state<=sFETCH1;
+        sdbd2<=sdbd_r;
+        sdbd <='0';
         
         --------------------------------
       WHEN sINDIRECT1 =>
