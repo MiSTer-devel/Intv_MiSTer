@@ -140,7 +140,6 @@ localparam CONF_STR = {
     "O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
     "OB,Video standard,NTSC,PAL;",
     "O1,Swap Joystick,Off,On;",
-    "O2,Overlay,Off,On;",
     "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;",
     "-;",
     "R0,Reset;",
@@ -189,7 +188,6 @@ wire swap    = status[1];
 wire ecs     = status[9];
 wire ivoice  =!status[10];
 wire mapp    = status[8:5];
-wire ovo_ena = status[2];
 intv_core intv_core
 (
     .clksys(clk_sys),
@@ -199,7 +197,6 @@ intv_core intv_core
     .ecs(ecs),
     .ivoice(ivoice),
     .mapp(mapp),
-    .ovo_ena(ovo_ena),
     .reset(RESET | status[0]),
     .vga_clk(CLK_VIDEO),
     .vga_ce(CE_PIXEL),

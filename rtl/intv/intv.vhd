@@ -23,7 +23,6 @@ ENTITY intv_core IS
     ecs              : IN    std_logic;
     ivoice           : IN    std_logic;
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
-    ovo_ena          : IN    std_logic;
     reset            : IN    std_logic;
     
     -- VGA
@@ -121,65 +120,11 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL map_cpt : uint4;
   SIGNAL clear : std_logic;
   
-  -- OVO -----------------------------------------
-  FUNCTION CC(i : character) RETURN unsigned IS
-  BEGIN
-    CASE i IS
-      WHEN '0' => RETURN "00000";
-      WHEN '1' => RETURN "00001";
-      WHEN '2' => RETURN "00010";
-      WHEN '3' => RETURN "00011";
-      WHEN '4' => RETURN "00100";
-      WHEN '5' => RETURN "00101";
-      WHEN '6' => RETURN "00110";
-      WHEN '7' => RETURN "00111";
-      WHEN '8' => RETURN "01000";
-      WHEN '9' => RETURN "01001";
-      WHEN 'A' => RETURN "01010";
-      WHEN 'B' => RETURN "01011";
-      WHEN 'C' => RETURN "01100";
-      WHEN 'D' => RETURN "01101";
-      WHEN 'E' => RETURN "01110";
-      WHEN 'F' => RETURN "01111";
-      WHEN ' ' => RETURN "10000";
-      WHEN '=' => RETURN "10001";
-      WHEN '+' => RETURN "10010";
-      WHEN '-' => RETURN "10011";
-      WHEN '<' => RETURN "10100";
-      WHEN '>' => RETURN "10101";
-      WHEN '^' => RETURN "10110";
-      WHEN 'v' => RETURN "10111";
-      WHEN '(' => RETURN "11000";
-      WHEN ')' => RETURN "11001";
-      WHEN ':' => RETURN "11010";
-      WHEN '.' => RETURN "11011";
-      WHEN ',' => RETURN "11100";
-      WHEN '?' => RETURN "11101";
-      WHEN '|' => RETURN "11110";
-      WHEN '#' => RETURN "11111";
-      WHEN OTHERS => RETURN "10000";
-    END CASE;
-  END FUNCTION CC;
-  FUNCTION CS(s : string) RETURN unsigned IS
-    VARIABLE r : unsigned(0 TO s'length*5-1);
-    VARIABLE j : natural :=0;
-  BEGIN
-    FOR i IN s'RANGE LOOP
-      r(j TO j+4) :=CC(s(i));
-      j:=j+5;
-    END LOOP;
-    RETURN r;
-  END FUNCTION CS;
-  
-  SIGNAL vga_r_i,vga_r_u  : unsigned(7 DOWNTO 0);
-  SIGNAL vga_g_i,vga_g_u  : unsigned(7 DOWNTO 0);
-  SIGNAL vga_b_i,vga_b_u  : unsigned(7 DOWNTO 0);
+  SIGNAL vga_r_u  : unsigned(7 DOWNTO 0);
+  SIGNAL vga_g_u  : unsigned(7 DOWNTO 0);
+  SIGNAL vga_b_u  : unsigned(7 DOWNTO 0);
   SIGNAL vga_de_u,vga_de_v : std_logic;
-  SIGNAL vga_hs_i,vga_vs_i : std_logic;
-  SIGNAL vga_de_i,vga_ce_l,vga_ce2,vga_ce3,vga_ce4,vga_ce5  : std_logic;
-  
-  SIGNAL ovo_in0  : unsigned(0 TO 32*5-1) :=(OTHERS =>'0');
-  SIGNAL ovo_in1  : unsigned(0 TO 32*5-1) :=(OTHERS =>'0');
+  SIGNAL vga_ce_l,vga_ce2,vga_ce3,vga_ce4,vga_ce5  : std_logic;
   
   TYPE type_jmap IS RECORD
     crc : uv32;
@@ -460,12 +405,12 @@ BEGIN
       cart_wr   => cart_wr,
       icart_dw  => icart_dw,
       icart_wr  => icart_wr,
-      vid_r     => vga_r_i,
-      vid_g     => vga_g_i,
-      vid_b     => vga_b_i,
-      vid_de    => vga_de_i,
-      vid_hs    => vga_hs_i,
-      vid_vs    => vga_vs_i,
+      vid_r     => vga_r_u,
+      vid_g     => vga_g_u,
+      vid_b     => vga_b_u,
+      vid_de    => vga_de_u,
+      vid_hs    => vga_hs,
+      vid_vs    => vga_vs,
       vid_ce    => vga_ce_l,
       clk       => clksys,
       reset_na  => reset_na);
@@ -1160,27 +1105,6 @@ BEGIN
   
   ----------------------------------------------------------
   
-  ----------------------------------------------------------
-  i_ovo: ENTITY work.ovo
-    PORT MAP (
-      i_r     => vga_r_i,
-      i_g     => vga_g_i,
-      i_b     => vga_b_i,
-      i_hs    => vga_hs_i,
-      i_vs    => vga_vs_i,
-      i_de    => vga_de_i,
-      i_en    => vga_ce_l,
-      i_clk   => clksys,
-      o_r     => vga_r_u,
-      o_g     => vga_g_u,
-      o_b     => vga_b_u,
-      o_hs    => vga_hs,
-      o_vs    => vga_vs,
-      o_de    => vga_de_u,
-      ena     => ovo_ena,
-      in0     => ovo_in0,
-      in1     => ovo_in1);
-
   PROCESS(clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN
@@ -1203,60 +1127,6 @@ BEGIN
 
   vga_clk<=clksys;
   vga_ce <=vga_ce_l;
-
-  ovo_in0<='0' & pa_i(7 DOWNTO 4) &
-            '0' & pa_i(3 DOWNTO 0) &
-            CC(' ') &
-            '0' & pb_i(7 DOWNTO 4) &
-            '0' & pb_i(3 DOWNTO 0) &
-            CC(' ') &
-            "0000" & intrm &
-            CC(' ') &
-            '0' & ad(15 DOWNTO 12) &
-            '0' & ad(11 DOWNTO 8) &
-            '0' & ad(7 DOWNTO 4) &
-            '0' & ad(3 DOWNTO 0) &
-            CC(' ') &
-            "0000" & bdic(2) &
-            "0000" & bdic(1) &
-            "0000" & bdic(0) &
-            CC(' ') &
-            '0' & unsigned(joystick_analog_0(15 DOWNTO 12)) &
-            '0' & unsigned(joystick_analog_0(11 DOWNTO 8)) &
-            '0' & unsigned(joystick_analog_0(7 DOWNTO 4)) &
-            '0' & unsigned(joystick_analog_0(3 DOWNTO 0)) &
-            CS("  ") &
-            '0' & to_unsigned(mmap,4) &
-            CC(' ') &
-            "00" & unsigned(ps2_key_mem(10 DOWNTO 8)) &
-            '0' & unsigned(ps2_key_mem(7 DOWNTO 4)) &
-            '0' & unsigned(ps2_key_mem(3 DOWNTO 0)) &
-            CC(' ') &
-            "0000" & bdrdy &
-            "0000" & busrq &
-            "0000" & busak;
-  
-  ovo_in1<='0' & pa2_i(7 DOWNTO 4) &
-            '0' & pa2_i(3 DOWNTO 0) &
-            "1001" & pa2_en &
-            '0' & pa2_o(7 DOWNTO 4) &
-            '0' & pa2_o(3 DOWNTO 0) &
-            CS(" ") &
-            '0' & pb2_i(7 DOWNTO 4) &
-            '0' & pb2_i(3 DOWNTO 0) &
-            "1001" & pb2_en &
-            '0' & pb2_o(7 DOWNTO 4) &
-            '0' & pb2_o(3 DOWNTO 0) &
-            CS(" ") &
-            '0' & xcrc(31 DOWNTO 28) &
-            '0' & xcrc(27 DOWNTO 24) &
-            '0' & xcrc(23 DOWNTO 20) &
-            '0' & xcrc(19 DOWNTO 16) &
-            '0' & xcrc(15 DOWNTO 12) &
-            '0' & xcrc(11 DOWNTO 8) &
-            '0' & xcrc(7 DOWNTO 4) &
-            '0' & xcrc(3 DOWNTO 0) &
-            CS("            ");
   
   ----------------------------------------------------------
   reset_na<=NOT reset AND pll_locked AND NOT ioctl_download AND NOT map_reset;

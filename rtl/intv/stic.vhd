@@ -689,6 +689,13 @@ BEGIN
         cart_wr<=pwr;
         
       END IF;
+
+      -- GRAM write-sensitive aliases
+      IF (padrs>=16#7800# AND padrs<=16#7FFF#) OR
+         (padrs>=16#B800# AND padrs<=16#BFFF#) OR
+         (padrs>=16#F800# AND padrs<=16#FFFF#) THEN
+         pwr_gram<=pwr;
+      END IF;
       
       -- BANK SWITCH REG ---------------
       IF padrs=16#2FFF# AND dw(15 DOWNTO 4)=x"2A5" AND pwr='1' AND ecs='1' THEN
@@ -1080,4 +1087,3 @@ BEGIN
          mobx(3)(9) & mobx(2)(9) & mobx(1)(9) & mobx(0)(9);
   
 END ARCHITECTURE rtl;
-
