@@ -34,6 +34,8 @@ ENTITY intv_core IS
     vga_hs           : OUT   std_logic; -- positive pulse!
     vga_vs           : OUT   std_logic; -- positive pulse!
     vga_de           : OUT   std_logic; -- = not (VBlank or HBlank)
+    vga_hb           : OUT   std_logic;
+    vga_vb           : OUT   std_logic;
     
     -- HPS IO
     joystick_0        : IN  unsigned(31 DOWNTO 0);
@@ -411,6 +413,8 @@ BEGIN
       vid_de    => vga_de_u,
       vid_hs    => vga_hs,
       vid_vs    => vga_vs,
+      vid_hb    => vga_hb,
+      vid_vb    => vga_vb,
       vid_ce    => vga_ce_l,
       clk       => clksys,
       reset_na  => reset_na);

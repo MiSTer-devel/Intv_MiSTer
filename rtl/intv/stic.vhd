@@ -99,6 +99,8 @@ ENTITY stic IS
     vid_b  : OUT uv8;
     vid_hs : OUT std_logic;
     vid_vs : OUT std_logic;
+    vid_hb : OUT std_logic;
+    vid_vb : OUT std_logic;
     vid_de : OUT std_logic;
     vid_ce : OUT std_logic;
     
@@ -1028,6 +1030,8 @@ BEGIN
       vid_vs<=to_std_logic((vpos=vsync AND hpos>=hsync) OR
                            (vpos>vsync AND vpos<vsyncend) OR
                            (vpos=vsyncend AND hpos<hsyncend)) ;
+      vid_hb<=to_std_logic(hpos>=hdisp);
+      vid_vb<=to_std_logic(vpos>=vdisp);
       
       vid_de<=to_std_logic(hpos<hdisp AND vpos<vdisp);
       vid_ce<=to_std_logic(cyc=11);

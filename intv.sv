@@ -110,7 +110,6 @@ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
 
-assign VGA_SL = 0;
 assign VGA_F1 = 0;
 
 assign AUDIO_S = 0;
@@ -138,6 +137,7 @@ localparam CONF_STR = {
     "O9,ECS,Off,On;",
     "OA,Voice,On,Off;",
     "O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+    "OCE,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
     "OB,Video standard,NTSC,PAL;",
     "O1,Swap Joystick,Off,On;",
     "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;",
@@ -188,6 +188,11 @@ wire swap    = status[1];
 wire ecs     = status[9];
 wire ivoice  =!status[10];
 wire mapp    = status[8:5];
+
+wire [7:0] CORE_R,CORE_G,CORE_B;
+wire       CORE_HS,CORE_VS,CORE_DE,CORE_CE;
+wire       CORE_HBLANK,CORE_VBLANK;
+   
 intv_core intv_core
 (
     .clksys(clk_sys),
@@ -199,13 +204,15 @@ intv_core intv_core
     .mapp(mapp),
     .reset(RESET | status[0]),
     .vga_clk(CLK_VIDEO),
-    .vga_ce(CE_PIXEL),
-    .vga_r(VGA_R),
-    .vga_g(VGA_G),
-    .vga_b(VGA_B),
-    .vga_hs(VGA_HS),
-    .vga_vs(VGA_VS),
-    .vga_de(VGA_DE),
+    .vga_ce(CORE_CE),
+    .vga_r(CORE_R),
+    .vga_g(CORE_G),
+    .vga_b(CORE_B),
+    .vga_hs(CORE_HS),
+    .vga_vs(CORE_VS),
+    .vga_de(CORE_DE),
+    .vga_vb(CORE_VBLANK),
+    .vga_hb(CORE_HBLANK),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
     .joystick_analog_0(joystick_analog_0),
@@ -219,6 +226,38 @@ intv_core intv_core
     .ps2_key(ps2_key),
     .audio_l(AUDIO_L),
     .audio_r(AUDIO_R)
+);
+
+wire [2:0] scale = status[14:12];
+wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
+
+assign VGA_SL = sl[1:0];
+
+video_mixer #(.LINE_LENGTH(520), .GAMMA(0)) video_mixer
+(
+    .scandoubler(scale || forced_scandoubler),
+    .scanlines(0),
+    .hq2x(scale==1),
+    .mono(0),
+//  .gamma_bus(),
+
+    .clk_vid(CLK_VIDEO),
+    .ce_pix(CORE_CE),
+    .R(CORE_R),
+    .G(CORE_G),
+    .B(CORE_B),
+    .HSync(CORE_HS),
+    .VSync(CORE_VS),
+    .HBlank(CORE_HBLANK),
+    .VBlank(CORE_VBLANK),
+
+    .ce_pix_out(CE_PIXEL),
+    .VGA_R(VGA_R),
+    .VGA_G(VGA_G),
+    .VGA_B(VGA_B),
+    .VGA_VS(VGA_VS),
+    .VGA_HS(VGA_HS),
+    .VGA_DE(VGA_DE)
 );
 
 pll pll
