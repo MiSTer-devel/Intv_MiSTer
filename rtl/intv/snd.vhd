@@ -24,7 +24,7 @@ ENTITY snd IS
     wr       : IN  std_logic;
     
     --------------------------
-    sound    : OUT sv8;
+    sound    : OUT uv12;
     
     --------------------------
     pa_i      : IN  uv8;
@@ -34,7 +34,7 @@ ENTITY snd IS
     pb_o      : OUT uv8;
     pb_en     : OUT std_logic;
     
-    tick     : IN  std_logic; --- 3.579545 / 16
+    tick     : IN  std_logic; --- 3.579545 / 16 = AY-3-8914 CLK / 8
     
     --------------------------
     clk      : IN  std_logic;
@@ -65,21 +65,19 @@ ARCHITECTURE rtl OF snd IS
   SIGNAL noise_out  : std_logic;
   
   SIGNAL env_sus : std_logic;
-  
-  SIGNAL xxx_lev_a,xxx_lev_b,xxx_lev_c : signed(4 DOWNTO 0);
-  SIGNAL xxx_sono : integer RANGE -100000 TO 100000;
+  SIGNAL sound1,sound2,sound3 : uv12;
   
   ------------------------------------------------
   SIGNAL right_right : std_logic;
   
-  CONSTANT LOG : arr_uv8(0 TO 15):=(
-    x"13",x"17",x"1B",x"20",x"26",x"2D",x"36",x"40",
-    x"4C",x"5A",x"6B",x"80",x"98",x"B4",x"D6",x"FF");
+  CONSTANT EXPO : arr_uv8(0 TO 15):=(
+    x"00",x"03",x"04",x"06",x"0a",x"0f",x"15",x"22",
+    x"28",x"41",x"5B",x"72",x"90",x"B5",x"D7",x"FF");
   
   SIGNAL pot : uv8;
   
   SIGNAL poly17 : unsigned(16 DOWNTO 0);
-  SIGNAL ticknoise,ticknoise2 : std_logic;
+  SIGNAL ticknoise,tickdiv : std_logic;
   ------------------------------------------------
 BEGIN
   
@@ -94,29 +92,16 @@ BEGIN
                      env      : uv4;       -- Envelope amplitude
                      m        : std_logic; -- 0= Fix 1=Envelope
                      en_gen   : std_logic; 
-                     en_noise : std_logic) RETURN signed IS
+                     en_noise : std_logic) RETURN unsigned IS
       VARIABLE ampli_v : uv4;
       VARIABLE sig_v   : std_logic;
-      VARIABLE out_v : uv5;
     BEGIN
-      sig_v:=(en_noise AND noise) OR (en_gen AND gen);
+      sig_v:=(NOT en_noise OR noise) AND (NOT en_gen OR gen);
       ampli_v:=mux(m,env,amp);
-      
-      IF sig_v='0' THEN
-        out_v:='0' & ampli_v;
-      ELSE
-        out_v:= "00000" - ('0' & ampli_v);
-      END IF;
-      
-      IF en_noise='0' AND en_gen='0' THEN
-        out_v:="00000";
-      END IF;
-      
-      RETURN signed(out_v);  
+      RETURN mux(sig_v,ampli_v,"0000");
     END FUNCTION mixgen;
     
     ------------------------------------
-    VARIABLE lev_v : signed(7 DOWNTO 0);
     VARIABLE p17z : std_logic;
   BEGIN
     IF reset_na='0' THEN
@@ -249,38 +234,34 @@ BEGIN
       ------------------------------------------------------
       -- Tone generators
       IF tick='1' THEN
-        IF tone_a_cpt/=x"000" THEN
-          tone_a_cpt<=tone_a_cpt-1;
-        ELSE
-          tone_a_cpt<=tone_a_per;
+        IF tone_a_per=0 OR tone_a_cpt+1>=tone_a_per THEN
+          tone_a_cpt<=(OTHERS =>'0');
           tone_a_out<=NOT tone_a_out;
-        END IF;
-        
-        IF tone_b_cpt/=x"000" THEN
-          tone_b_cpt<=tone_b_cpt-1;
         ELSE
-          tone_b_cpt<=tone_b_per;
+          tone_a_cpt<=tone_a_cpt+1;
+        END IF;
+        IF tone_b_per=0 OR tone_b_cpt+1>=tone_b_per THEN
+          tone_b_cpt<=(OTHERS =>'0');
           tone_b_out<=NOT tone_b_out;
-        END IF;
-        
-        IF tone_c_cpt/=x"000" THEN
-          tone_c_cpt<=tone_c_cpt-1;
         ELSE
-          tone_c_cpt<=tone_c_per;
+          tone_b_cpt<=tone_b_cpt+1;
+        END IF;
+        IF tone_c_per=0 OR tone_c_cpt+1>=tone_c_per THEN
+          tone_c_cpt<=(OTHERS =>'0');
           tone_c_out<=NOT tone_c_out;
+        ELSE
+          tone_c_cpt<=tone_c_cpt+1;
         END IF;
       END IF;
-        
+      
       IF tone_a_en='0' THEN
         tone_a_out<='0';
         tone_a_cpt<=(OTHERS =>'0');
       END IF;
-
       IF tone_b_en='0' THEN
         tone_b_out<='0';
         tone_b_cpt<=(OTHERS =>'0');
       END IF;
-
       IF tone_c_en='0' THEN
         tone_c_out<='0';
         tone_c_cpt<=(OTHERS =>'0');
@@ -294,18 +275,16 @@ BEGIN
           ticknoise<='0';
         ELSE
           IF noise_per="00000" THEN
-            noise_cpt<="00000";  
+            noise_cpt<="00000";
           ELSE
             noise_cpt<=noise_per-1;
           END IF;
           ticknoise<='1';
         END IF;
-
-        ticknoise2<=ticknoise2 XOR ticknoise;
-
-        IF ticknoise='1' AND ticknoise2='1' THEN
+        
+        IF ticknoise='1' THEN
           p17z := '0';
-          IF poly17 = "00000000000000000" THEN
+          IF poly17 = 0 THEN
             p17z := '1';
           END IF;
           poly17 <= (poly17(0) XOR poly17(2) XOR p17z) & poly17(16 DOWNTO 1);
@@ -316,7 +295,10 @@ BEGIN
       
       ------------------------------------------------------
       -- Envelope
-      IF tick='1' THEN
+
+      tickdiv<=tickdiv XOR tick;
+      
+      IF (tick AND tickdiv)='1' THEN
         IF env_cpt/=x"0000" THEN
           env_cpt<=env_cpt-1;
         ELSE
@@ -381,35 +363,17 @@ BEGIN
       END IF;
       
       ------------------------------------------------------
-      lev_v:=x"00";
-      lev_v:=lev_v+mixgen(tone_a_out,noise_out,
-                          tone_a_amp,env_amp,
-                          tone_a_m,
-                          tone_a_en,noise_a_en);
-      xxx_lev_a<=mixgen(tone_a_out,noise_out,
-                        tone_a_amp,env_amp,
-                        tone_a_m,
-                        tone_a_en,noise_a_en);
+      sound1<="000" & EXPO(to_integer(
+        mixgen(tone_a_out,noise_out,tone_a_amp,env_amp,
+               tone_a_m,tone_a_en,noise_a_en))) & "0";
+      sound2<="000" & EXPO(to_integer(
+        mixgen(tone_b_out,noise_out,tone_b_amp,env_amp,
+               tone_b_m,tone_b_en,noise_b_en))) & "0";
+      sound3<="000" & EXPO(to_integer(
+        mixgen(tone_c_out,noise_out,tone_c_amp,env_amp,
+               tone_c_m,tone_c_en,noise_c_en))) & "0";
       
-      lev_v:=lev_v+mixgen(tone_b_out,noise_out,
-                          tone_b_amp,env_amp,
-                          tone_b_m,
-                          tone_b_en,noise_b_en);
-      xxx_lev_b<=mixgen(tone_b_out,noise_out,
-                        tone_b_amp,env_amp,
-                        tone_b_m,
-                        tone_b_en,noise_b_en);
-      
-      lev_v:=lev_v+mixgen(tone_c_out,noise_out,
-                          tone_c_amp,env_amp,
-                          tone_c_m,
-                          tone_c_en,noise_c_en);
-      xxx_lev_c<=mixgen(tone_c_out,noise_out,
-                          tone_c_amp,env_amp,
-                          tone_c_m,
-                          tone_c_en,noise_c_en);
-      sound<=lev_v;
-      xxx_sono<=to_integer(lev_v);
+      sound<=sound1 + sound2 + sound3;
       
     END IF;
   END PROCESS SONO;

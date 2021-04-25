@@ -713,7 +713,7 @@ ARCHITECTURE rtl OF ivoice IS
   TYPE arr_uv10 IS ARRAY(natural RANGE <>) OF uv10;
   SIGNAL fifo : arr_uv10(0 TO 63);
   SIGNAL fifo_lev : uint6;
-  SIGNAL fifo_v,fifo_v2,push,pop,pop2 : std_logic;
+  SIGNAL fifo_v,fifo_v2,push,pop,pop2,pop_double : std_logic;
   SIGNAL fifo_rd,fifo_rd2,fifo_wd : uv10;
   SIGNAL repeat : uv6;
   SIGNAL regs : arr_uv8(0 TO 15);
@@ -756,27 +756,29 @@ ARCHITECTURE rtl OF ivoice IS
                 zdata : int16;
                 div   : int16) RETURN integer IS
     VARIABLE mul : signed(25 DOWNTO 0);
+    VARIABLE v : int20;
   BEGIN
     mul:=to_signed(coef,10) * to_signed(zdata,16);
     IF div=256 THEN
-      mul := mul + (to_signed(samp,16) & "00000000");
-      RETURN to_integer(mul(23 DOWNTO 8));
-    ELSE -- div=512
-      mul := mul + (to_signed(samp,16) & "000000000");
-      RETURN to_integer(mul(24 DOWNTO 9));
+      v:=samp + to_integer(mul(25 DOWNTO 8));
+    ELSE
+      v:=samp + to_integer(mul(25 DOWNTO 9));
     END IF;
+    IF v>32767 THEN v:=32767; END IF;
+    IF v<-32768 THEN v:=-32768; END IF;
+    RETURN v;
   END FUNCTION calc;
   FUNCTION sat(i : integer) RETURN integer IS
   BEGIN
-    IF i>32767 THEN RETURN i-65536; END IF;
-    IF i<-32768 THEN RETURN i+65536; END IF;
-    RETURN i;
+    IF i>127 THEN RETURN 127; END IF;
+    IF i<-128 THEN  RETURN -128; END IF;
+    RETURN i;   
   END FUNCTION;
 
   SIGNAL qreg : uv7;
   SIGNAL reg_coef : uint9;
   SIGNAL coef : int10;
-  SIGNAL samp,samp2 : int16;
+  SIGNAL samp : int16;
   SIGNAL zdata00,zdata01,zdata10,zdata11,zdata20,zdata21 : int16;
   SIGNAL zdata30,zdata31,zdata40,zdata41,zdata50,zdata51 : int16;
   SIGNAL lfsr : uv15;
@@ -894,8 +896,8 @@ BEGIN
   fifod<=fifo_rd & fifo_rd2;
   
   -- Mem access
-  rom_a<=to_integer(pc(18 DOWNTO 3)) WHEN tick2='1' ELSE
-         to_integer(pc(18 DOWNTO 3))+1;
+  rom_a<=to_integer(pc(15 DOWNTO 3)-"1000000000000000") WHEN tick2='1' ELSE
+         to_integer(pc(15 DOWNTO 3)-"1000000000000000")+1;
   
   rom_dr<=ROMVOICE(rom_a MOD 2048) WHEN rising_edge(clksys);
 
@@ -951,7 +953,8 @@ BEGIN
     VARIABLE romd_v,fifod_v,imm_v,inst_v,code_v : uv8;
     VARIABLE tmp_v : uv16;
     VARIABLE len_v : uint4;
-    VARIABLE rpc_v : uv19;
+    VARIABLE pc_v : uv19;
+    VARIABLE branch_v : boolean;
   BEGIN
     IF reset_na='0' THEN
       state<=sIDLE;
@@ -960,6 +963,8 @@ BEGIN
       repeat<="000000";
       mode<="00";
       page<=x"1";
+      fifoptr<=0;
+      pop_double<='0';
       
     ELSIF rising_edge(clksys) THEN
       ------------------------------------------------------
@@ -970,7 +975,10 @@ BEGIN
         mode<="00";
         page<=x"1";
         lfsr<=to_unsigned(1,15);
+        fifoptr<=0;
+        pop_double<='0';
       END IF;
+      
       ------------------------------------------------------
       tick2<=tick;
       tick3<=tick2;
@@ -979,6 +987,7 @@ BEGIN
       
       len_v:=0;
       pop2<='0';
+      branch_v:=false;
       
       IF tick3='1' THEN
         romd(7 DOWNTO 0)<=rom_dr;
@@ -1031,8 +1040,9 @@ BEGIN
                   ald_clr<='1';
                   act<='1';
                   state<=sDECODE1;
-                  pc<="0000000" & ald_ad & "0000";
+                  pc<="0001000" & ald_ad & "0000";
                   fifomode<=false;
+                  branch_v:=true;
                 END IF;
               END IF;
             END IF;
@@ -1040,7 +1050,6 @@ BEGIN
             -------------------------------------------------  
           WHEN sDECODE1 =>
             len_v:=8;
-            pc<=pc+len_v;
             inst_v:=bswap(code_v);
             index_a <=to_integer(inst_v(3 DOWNTO 0) & mode);
             optxt<=OP_TXT(to_integer(inst_v(3 DOWNTO 0)));
@@ -1072,7 +1081,6 @@ BEGIN
           WHEN sMICROCODE =>
             -- Execute Microcode
             len_v:=micro.len;
-            pc<=pc+len_v;
             index<=index+1;
             
             CASE micro.op IS
@@ -1083,33 +1091,53 @@ BEGIN
                 
               WHEN JMP =>
                 nexti<=true;
-                pc<=page & inst(7 DOWNTO 4) & bswap(code_v) & "000";
-                fifomode<=(page & inst(7 DOWNTO 4) & bswap(code_v)=x"1800");
+                branch_v:=true;
+                
+                pc_v:=page & inst(7 DOWNTO 4) & bswap(code_v) & "000";
+                pc<=pc_v;
+                fifomode<=(pc_v(18 DOWNTO 3)=x"1800");
+                
                 fifoptr<=0;
+                IF fifomode THEN
+                  pop2<='1';
+                  pop_double<=to_std_logic(fifoptr>=3);
+                END IF;
                 
               WHEN JSR =>
                 nexti<=true;
-                pc<=page & inst(7 DOWNTO 4) & bswap(code_v) & "000";
-                fifomode<=(page & inst(7 DOWNTO 4) & bswap(code_v)=x"1800");
-                fifoptr<=0;
-                ret_pc<=pc + len_v; -- Return address
+                branch_v:=true;
                 
-                rpc_v:=pc + len_v + 7;
-                ret_pc<=rpc_v(18 DOWNTO 3) & "000";
-                
+                pc_v:=pc + len_v + 7;
+                ret_pc<=pc_v(18 DOWNTO 3) & "000";                
                 ret_val <=true; -- return execution valid
+                
+                pc_v:=page & inst(7 DOWNTO 4) & bswap(code_v) & "000";
+                pc<=pc_v;
+                fifomode<=(pc_v(18 DOWNTO 3)=x"1800");
+                
+                fifoptr<=0;
+                IF fifomode THEN
+                  pop2<='1';
+                  pop_double<=to_std_logic(fifoptr>=3);
+                END IF;
                 
               WHEN RTS =>
                 nexti<=true;
+                
                 IF inst(7 DOWNTO 4)="0000" THEN -- RTS
+                  branch_v:=true;
+                  IF fifoptr>0 THEN
+                    pop2<='1';
+                  END IF;
+                  fifoptr<=0;
                   IF NOT ret_val THEN
                     act<='0';
                   ELSE
                     fifomode<=(ret_pc(18 DOWNTO 3)=x"1800");
-                    fifoptr<=0;
                     pc<=ret_pc;
                     ret_val<=false;
                   END IF;
+                  
                 ELSE -- SETPAGE
                   page<=inst(7 DOWNTO 4);
                 END IF;
@@ -1236,7 +1264,6 @@ BEGIN
           -- Filter Stage 0
           WHEN sCALC01 =>
             -- <B0>
-            samp2<=samp;
             state<=sCALC02;
             samp   <=calc(samp,coef,zdata01,512);
             zdata01<=zdata00;
@@ -1321,7 +1348,7 @@ BEGIN
           -- Sound output.
           WHEN sSOUND =>
             IF divcpt=320 THEN
-              sound<=to_signed(samp*8,16);
+              sound<=to_signed(sat(samp/4)*256,16);
               IF silent='1' THEN
                 sound<=x"0000";
               END IF;
@@ -1336,14 +1363,25 @@ BEGIN
             
           -----------------------------------------------
         END CASE;
-        
-        IF fifomode THEN
-          fifoptr<=fifoptr+len_v;
-          IF fifoptr+len_v>=10 THEN
-            fifoptr<=fifoptr+len_v-10;
-            pop2<='1';
+
+        IF NOT branch_v THEN
+          IF NOT fifomode THEN 
+            pc<=pc+len_v;
+          ELSE
+            fifoptr<=fifoptr+len_v;
+            IF fifoptr+len_v>=10 THEN
+              fifoptr<=fifoptr+len_v-10;
+              pop2<='1';
+            END IF;
           END IF;
         END IF;
+
+        IF pop_double='1' AND NOT branch_v THEN
+          fifoptr<=0;
+          pop2<='1';
+          pop_double<='0';
+        END IF;
+        
       END IF; -- tick='1'
       
       ---------------------------------------------------

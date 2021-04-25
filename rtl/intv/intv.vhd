@@ -111,7 +111,7 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL ivoice_dr,ivoice_dw : uv16;
   SIGNAL ivoice_wr : std_logic;
   SIGNAL ivoice_divi : uint9;
-  SIGNAL sound,sound2 : sv8;
+  SIGNAL sound,sound2 : uv12;
   SIGNAL sound_iv : sv16;
   SIGNAL bdic : uv3;
   SIGNAL bdrdy,busrq,busak,halt,intrm : std_logic;
@@ -471,11 +471,13 @@ BEGIN
   
   ivoice_divi<=358 WHEN pal='0' ELSE 400;
 
-  audio_l<=std_logic_vector(sound + signed(mux(ecs,unsigned(sound2),x"00")) +
-    signed(mux(ivoice,unsigned(sound_iv(15 DOWNTO 8)),x"00")) & x"00");
+  audio_l<=std_logic_vector(
+    ('0' & signed(sound + mux(ecs,sound2,x"000")) & "000") +
+    (signed(mux(ivoice,unsigned(sound_iv(15 DOWNTO 8)),x"00")) & "000"));
   
-  audio_r<=std_logic_vector(sound + signed(mux(ecs,unsigned(sound2),x"00")) +
-    signed(mux(ivoice,unsigned(sound_iv(15 DOWNTO 8)),x"00")) & x"00");
+  audio_r<=std_logic_vector(
+    ('0' & signed(sound + mux(ecs,sound2,x"000")) & "000") +
+    (signed(mux(ivoice,unsigned(sound_iv(15 DOWNTO 8)),x"00")) & "000"));
   
   Seq:PROCESS(clksys) IS
   BEGIN
@@ -502,7 +504,7 @@ BEGIN
       ELSIF mapp="0000" THEN
         mmap<=mux(found='1',smap,0);
       ELSE
-        mmap<=to_integer(unsigned(mapp))-1;
+        mmap<=(to_integer(unsigned(mapp))-1+16) MOD 16;
       END IF;
       
       mmap2<=mmap;

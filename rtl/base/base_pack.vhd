@@ -90,6 +90,10 @@ PACKAGE base_pack IS
   SUBTYPE uint14 IS natural RANGE 0 TO 16383;
   SUBTYPE uint15 IS natural RANGE 0 TO 32767;
   SUBTYPE uint16 IS natural RANGE 0 TO 65535;
+  SUBTYPE uint17 IS natural RANGE 0 TO 131071;
+  SUBTYPE uint18 IS natural RANGE 0 TO 262143;
+  SUBTYPE uint19 IS natural RANGE 0 TO 524287;
+  SUBTYPE uint20 IS natural RANGE 0 TO 1048575;
   SUBTYPE uint24 IS natural RANGE 0 TO 16777215;
 
   SUBTYPE int2  IS integer RANGE     -2 TO 1;
@@ -108,6 +112,9 @@ PACKAGE base_pack IS
   SUBTYPE int15 IS integer RANGE -16384 TO 16383;
   SUBTYPE int16 IS integer RANGE -32768 TO 32767;
   SUBTYPE int17 IS integer RANGE -65536 TO 65535;
+  SUBTYPE int18 IS integer RANGE -131072 TO 131071;
+  SUBTYPE int19 IS integer RANGE -262144 TO 262143;
+  SUBTYPE int20 IS integer RANGE -524288 TO 524287;
   
   
   -------------------------------------------------------------
