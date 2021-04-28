@@ -1,5 +1,4 @@
 set_global_assignment -name VHDL_FILE rtl/intv/ivoice.vhd
-set_global_assignment -name VHDL_FILE rtl/intv/rom_pack.vhd
 set_global_assignment -name VHDL_FILE rtl/intv/cp1610.vhd
 set_global_assignment -name VHDL_FILE rtl/intv/cp1610_pack.vhd
 set_global_assignment -name VHDL_FILE rtl/intv/intv.vhd

@@ -66,7 +66,7 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL ioctl_wait_l,ioctl_download2,ioctl_wr2 : std_logic;
 
   SIGNAL adrs : uv17;
-  TYPE enum_state IS (sIDLE,sDOWN,sDOWN_BIN,sCLR,
+  TYPE enum_state IS (sIDLE,sDOWN,sDOWN_BIN,sCLR,sROM,
                       sDOWN_ROM,sDOWN_ROM2,sDOWN_ROM3,sDOWN_ROM4,
                       sDOWN_LOOP,sDOWN_CRC,sDOWN_CRC2,
                       sDOWN_RANGE,sDOWN_RANGE2,sDOWN_RANGE3,sWAIT);
@@ -121,6 +121,10 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL map_reset : std_logic;
   SIGNAL map_cpt : uint4;
   SIGNAL clear : std_logic;
+  SIGNAL rom_dw : uv8;
+  SIGNAL rom_aw : uv16;
+  SIGNAL rom_voice_wr,rom_grom_wr,rom_exec_wr,rom_ecs_wr : std_logic;
+  SIGNAL rom_voice_up,rom_grom_up,rom_exec_up,rom_ecs_up : std_logic;
   
   SIGNAL vga_r_u  : unsigned(7 DOWNTO 0);
   SIGNAL vga_g_u  : unsigned(7 DOWNTO 0);
@@ -379,45 +383,50 @@ BEGIN
   -- STIC + SYSRAM + GRAM + GROM + Decoder
   i_stic: ENTITY work.stic
     PORT MAP (
-      dw        => dw,
-      dr        => dr,
-      bdic      => bdic,
-      bdrdy     => bdrdy,
-      busrq     => busrq,
-      busak     => busak,
-      intrm     => intrm,
-      phi       => tick_cpu,
-      pal       => pal,
-      ecs       => ecs,
-      ivoice    => ivoice,
-      clear     => clear,
-      ad        => ad,
-      snd_dr    => snd_dr,
-      snd_dw    => snd_dw,
-      snd_wr    => snd_wr,
-      snd2_dr   => snd2_dr,
-      snd2_dw   => snd2_dw,
-      snd2_wr   => snd2_wr,
-      ivoice_dr => ivoice_dr,
-      ivoice_dw => ivoice_dw,
-      ivoice_wr => ivoice_wr,
-      cart_acc  => cart_acc,
-      cart_dr   => cart_dr,
-      cart_dw   => cart_dw,
-      cart_wr   => cart_wr,
-      icart_dw  => icart_dw,
-      icart_wr  => icart_wr,
-      vid_r     => vga_r_u,
-      vid_g     => vga_g_u,
-      vid_b     => vga_b_u,
-      vid_de    => vga_de_u,
-      vid_hs    => vga_hs,
-      vid_vs    => vga_vs,
-      vid_hb    => vga_hb,
-      vid_vb    => vga_vb,
-      vid_ce    => vga_ce_l,
-      clk       => clksys,
-      reset_na  => reset_na);
+      dw          => dw,
+      dr          => dr,
+      bdic        => bdic,
+      bdrdy       => bdrdy,
+      busrq       => busrq,
+      busak       => busak,
+      intrm       => intrm,
+      phi         => tick_cpu,
+      pal         => pal,
+      ecs         => ecs,
+      ivoice      => ivoice,
+      clear       => clear,
+      ad          => ad,
+      snd_dr      => snd_dr,
+      snd_dw      => snd_dw,
+      snd_wr      => snd_wr,
+      snd2_dr     => snd2_dr,
+      snd2_dw     => snd2_dw,
+      snd2_wr     => snd2_wr,
+      ivoice_dr   => ivoice_dr,
+      ivoice_dw   => ivoice_dw,
+      ivoice_wr   => ivoice_wr,
+      cart_acc    => cart_acc,
+      cart_dr     => cart_dr,
+      cart_dw     => cart_dw,
+      cart_wr     => cart_wr,
+      icart_dw    => icart_dw,
+      icart_wr    => icart_wr,
+      rom_grom_wr => rom_grom_wr,
+      rom_exec_wr => rom_exec_wr,
+      rom_ecs_wr  => rom_ecs_wr,
+      rom_aw      => rom_aw,
+      rom_dw      => rom_dw,
+      vid_r       => vga_r_u,
+      vid_g       => vga_g_u,
+      vid_b       => vga_b_u,
+      vid_de      => vga_de_u,
+      vid_hs      => vga_hs,
+      vid_vs      => vga_vs,
+      vid_hb      => vga_hb,
+      vid_vb      => vga_vb,
+      vid_ce      => vga_ce_l,
+      clk         => clksys,
+      reset_na    => reset_na);
 
   -- AUDIO+IO AY-3-8914
   i_snd: ENTITY work.snd
@@ -466,11 +475,14 @@ BEGIN
       tick     => tick_ivoice,
       divi     => ivoice_divi,
       sound    => sound_iv,
+      rom_voice_wr => rom_voice_wr,
+      rom_aw   => rom_aw,
+      rom_dw   => rom_dw,
       clksys   => clksys,
       reset_na => reset_na);
   
   ivoice_divi<=358 WHEN pal='0' ELSE 400;
-
+  
   audio_l<=std_logic_vector(
     ('0' & signed(sound + mux(ecs,sound2,x"000")) & "000") +
     (signed(mux(ivoice,unsigned(sound_iv(15 DOWNTO 8)),x"00")) & "000"));
@@ -504,7 +516,7 @@ BEGIN
       ELSIF mapp="0000" THEN
         mmap<=mux(found='1',smap,0);
       ELSE
-        mmap<=(to_integer(unsigned(mapp))-1+16) MOD 16;
+        mmap<=to_integer(unsigned(mapp))-1;
       END IF;
       
       mmap2<=mmap;
@@ -613,7 +625,7 @@ BEGIN
       ioctl_wr2<=ioctl_wr;
       wr_v:=ioctl_wr AND NOT ioctl_wait_l;
       
-      IF ioctl_download='0' THEN
+      IF ioctl_download='0' AND state/=sROM THEN
         state<=sIDLE;
       END IF;
       
@@ -623,6 +635,12 @@ BEGIN
       icart_acc_dwr<='0';
       icart_map_dwr<='0';
       icart_fine_dwr<='0';
+
+      rom_dw<=unsigned(ioctl_dout);
+      rom_exec_wr<='0';
+      rom_grom_wr<='0';
+      rom_ecs_wr <='0';
+      rom_voice_wr<='0';
       
       ioctl_wait_l<=ioctl_wr;
       clear<='0';
@@ -636,6 +654,10 @@ BEGIN
             ioctl_wait_l<='1';
             state<=sCLR;
           END IF;
+          rom_exec_up<='0';
+          rom_grom_up<='0';
+          rom_voice_up<='0';
+          rom_ecs_up<='0';
           
         WHEN sCLR =>
           clear<='1';
@@ -649,8 +671,15 @@ BEGIN
           END IF;
           
         WHEN sDOWN =>
+          w_wrl<=wr_v AND     ioctl_addr(0);
+          w_wrh<=wr_v AND NOT ioctl_addr(0);
+          w_a <=unsigned(ioctl_addr(16 DOWNTO 1));
           IF wr_v='1' THEN
-            IF ioctl_dout=x"A8" THEN
+            IF unsigned(ioctl_index)=0 THEN
+              state<=sROM;
+              w_wrl<='0';
+              w_wrh<='0';
+            ELSIF ioctl_dout=x"A8" THEN
               state<=sDOWN_ROM;
               icart<='1';
             ELSE
@@ -658,9 +687,37 @@ BEGIN
               icart<='0';
             END IF;
           END IF;
-          w_wrl<=wr_v AND     ioctl_addr(0);
-          w_wrh<=wr_v AND NOT ioctl_addr(0);
-          w_a <=unsigned(ioctl_addr(16 DOWNTO 1));
+          
+          ----------------------------------------------------
+          -- Internal ROMs : EXEC,GROM,VOICE,ECS
+        WHEN sROM =>
+          rom_aw<=unsigned(ioctl_addr(15 DOWNTO 0));
+          w_wrl<='0';
+          w_wrh<='0';
+          IF unsigned(ioctl_addr)<16#2000# AND unsigned(ioctl_index)=0 THEN
+            rom_exec_wr<=wr_v;
+            rom_exec_up<=rom_exec_up OR wr_v;
+          ELSIF (unsigned(ioctl_addr)<16#2800# AND unsigned(ioctl_index)=0) OR
+            unsigned(ioctl_index)=16#40# THEN
+            rom_grom_wr<=wr_v;
+            rom_grom_up<=rom_grom_up OR wr_v;
+          ELSIF (unsigned(ioctl_addr)<16#3000# AND unsigned(ioctl_index)=0) OR
+            unsigned(ioctl_index)=16#80# THEN
+            rom_voice_wr<=wr_v;
+            rom_voice_up<=rom_voice_up OR wr_v;
+          ELSIF unsigned(ioctl_index)=0 THEN
+            rom_ecs_wr<=wr_v;
+            rom_ecs_up<=rom_ecs_up OR wr_v;
+            rom_aw<=unsigned(ioctl_addr(15 DOWNTO 0)) - x"3000";
+          ELSIF unsigned(ioctl_index)=16#C0# THEN
+            rom_ecs_wr<=wr_v;
+            rom_ecs_up<=rom_ecs_up OR wr_v;
+          END IF;
+          
+          IF ioctl_download='0' AND rom_exec_up='1' AND
+            rom_ecs_up='1' AND rom_voice_up='1' AND rom_grom_up='1' THEN
+            state<=sDOWN;
+          END IF;
           
         ----------------------------------------------------
         -- Plain binary file
@@ -753,7 +810,7 @@ BEGIN
           END IF;
           
         WHEN sDOWN_RANGE3 =>
-          -- Adress Restriction table : 32 octets pour 64 zones
+          -- Adress Restriction table : 32 bytes => 64 zones
           
           IF wr_v='1' THEN
             icart_map_dwr<='1';
@@ -865,6 +922,13 @@ BEGIN
       END IF;
     END IF;
   END PROCESS icarfine2;
+
+  ----------------------------------------------------------
+  -- ROM WRITE
+  -- EXEC  : 8192  = 4096  * 2    0000 => 1FFF
+  -- GROM  : 2048                 2000 => 27FF
+  -- VOICE : 2048                 2800 => 2FFF
+  -- ECS   : 24576 = 12288 * 2    3000 => 8FFF
   
   ----------------------------------------------------------
   -- IO MAPPING
@@ -1110,7 +1174,6 @@ BEGIN
   END PROCESS KeyCodes;
   
   ----------------------------------------------------------
-  
   PROCESS(clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN

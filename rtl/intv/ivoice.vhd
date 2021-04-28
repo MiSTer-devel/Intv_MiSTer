@@ -24,7 +24,6 @@ USE ieee.numeric_std.ALL;
 
 LIBRARY work;
 USE work.base_pack.ALL;
-USE work.rom_pack.ALL;
 
 ENTITY ivoice IS
   PORT (
@@ -40,7 +39,13 @@ ENTITY ivoice IS
     divi      : in  natural;   -- 358 ... 400
     
     sound     : OUT sv16;
+    
     --------------------------
+    rom_voice_wr : IN  std_logic;
+    rom_aw : IN  uv16;
+    rom_dw : IN  uv8;
+    
+    --------------------------    
     clksys    : IN  std_logic; --- 43MHz ... 48MHz
     reset_na  : IN std_logic
     );
@@ -708,7 +713,7 @@ ARCHITECTURE rtl OF ivoice IS
     347 ,363 ,379 ,395 ,411 ,421 ,431 ,441 ,
     451 ,451 ,451 ,451 ,455 ,455 ,455 ,455 );
   
-  CONSTANT ROMVOICE : arr8 := INIT_VOICE; -- ROM
+  SIGNAL ROMVOICE : arr_uv8(0 TO 2047);
   
   TYPE arr_uv10 IS ARRAY(natural RANGE <>) OF uv10;
   SIGNAL fifo : arr_uv10(0 TO 63);
@@ -772,7 +777,7 @@ ARCHITECTURE rtl OF ivoice IS
   BEGIN
     IF i>127 THEN RETURN 127; END IF;
     IF i<-128 THEN  RETURN -128; END IF;
-    RETURN i;   
+    RETURN i;
   END FUNCTION;
 
   SIGNAL qreg : uv7;
@@ -896,11 +901,20 @@ BEGIN
   fifod<=fifo_rd & fifo_rd2;
   
   -- Mem access
-  rom_a<=to_integer(pc(15 DOWNTO 3)-"1000000000000000") WHEN tick2='1' ELSE
-         to_integer(pc(15 DOWNTO 3)-"1000000000000000")+1;
+  rom_a<=to_integer(pc(18 DOWNTO 3)) WHEN tick2='1' ELSE
+         to_integer(pc(18 DOWNTO 3))+1;
   
   rom_dr<=ROMVOICE(rom_a MOD 2048) WHEN rising_edge(clksys);
 
+  PROCESS(clksys) IS
+  BEGIN
+    IF rising_edge(clksys) THEN
+      IF rom_voice_wr='1' THEN
+        ROMVOICE(to_integer(rom_aw(10 DOWNTO 0)))<=rom_dw;
+      END IF;
+    END IF;
+  END PROCESS;
+  
   istart<=CODE_INDEX(index_a) WHEN rising_edge(clksys);
 
   micro<=MICROCODE(index) WHEN rising_edge(clksys);
@@ -1363,7 +1377,7 @@ BEGIN
             
           -----------------------------------------------
         END CASE;
-
+        
         IF NOT branch_v THEN
           IF NOT fifomode THEN 
             pc<=pc+len_v;

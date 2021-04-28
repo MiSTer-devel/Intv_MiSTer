@@ -40,7 +40,6 @@ USE std.textio.ALL;
 LIBRARY work;
 USE work.base_pack.ALL;
 USE work.cp1610_pack.ALL;
-USE work.rom_pack.ALL;
 
 ENTITY stic IS
   PORT (
@@ -91,6 +90,13 @@ ENTITY stic IS
     hits  : OUT uv64;
     hitbg : OUT uv8;
     hitbo : OUT uv8;
+    
+    ------------------------------------
+    rom_grom_wr : IN  std_logic;
+    rom_exec_wr : IN  std_logic;
+    rom_ecs_wr  : IN  std_logic;
+    rom_aw      : IN  uv16;
+    rom_dw      : IN  uv8;
     
     ------------------------------------
     -- Video out
@@ -427,17 +433,18 @@ ARCHITECTURE rtl OF stic IS
 
   SIGNAL dwi : uv16;
   
-  CONSTANT GROM : arr8(0 TO 2047) := INIT_GROM;
+  SIGNAL GROM : arr_uv8(0 TO 2047); -- Character ROM
   
   SIGNAL   gram : arr_uv8(0 TO 511) :=(OTHERS =>x"00"); -- 512 * 8bits
   SIGNAL sysram : arr_uv16(0 TO 511) :=(OTHERS =>x"0000"); -- 160h = 352 * 16bits real
   SIGNAL scram  : arr_uv8(0 TO 255) :=(OTHERS =>x"00"); -- 256 * 8bits
 
   SIGNAL ecsram : arr_uv8(0 TO 2047):=(OTHERS =>x"00"); -- 2k * 8bits
-
-  CONSTANT EXECROM : arr16(0 TO 4095) := INIT_EXEC; -- Executive ROM
   
-  CONSTANT ECSROM  : arr16(0 TO 12287) := INIT_ECS; -- ECS ROM
+  SIGNAL EXECROM_L,EXECROM_H : arr_uv8(0 TO 4095); -- Executive ROM
+  
+  SIGNAL ECSROM_L,ECSROM_H : arr_uv8(0 TO 16383); -- ECS ROM
+  
   SIGNAL bank : arr_uv4(0 TO 15);
   
   CONSTANT PALETTE : arr_uv24(0 TO 15) := -- RRGGBB
@@ -691,7 +698,7 @@ BEGIN
         cart_wr<=pwr;
         
       END IF;
-
+      
       -- GRAM write-sensitive aliases
       IF (padrs>=16#7800# AND padrs<=16#7FFF#) OR
          (padrs>=16#B800# AND padrs<=16#BFFF#) OR
@@ -756,7 +763,8 @@ BEGIN
       pr_gram   <=gram(padrs MOD 512);
       pr_scram  <=scram(padrs MOD 256);
       pr_grom   <=GROM(padrs MOD 2048);
-      pr_execrom<=EXECROM(padrs MOD 4096);
+      pr_execrom(7 DOWNTO 0) <=EXECROM_L(padrs MOD 4096);
+      pr_execrom(15 DOWNTO 8)<=EXECROM_H(padrs MOD 4096);
       
       IF padrs>=16#2000# AND padrs<=16#2FFF# THEN
         ad_v:=padrs - 16#2000#;
@@ -767,7 +775,9 @@ BEGIN
       ELSE
         ad_v:=padrs MOD 4096;
       END IF;
-      pr_ecsrom<=ECSROM(ad_v);
+      
+      pr_ecsrom(7 DOWNTO 0) <=ECSROM_L(ad_v);
+      pr_ecsrom(15 DOWNTO 8)<=ECSROM_H(ad_v);
       
       r_gram <=gram(a_gmem MOD 512);
       r_sysram<=sysram(a_sysram);
@@ -775,6 +785,27 @@ BEGIN
       
     END IF;
   END PROCESS Mem;
+
+  ROM_WR:PROCESS (clk) IS
+  BEGIN
+    IF rising_edge(clk) THEN
+      IF rom_grom_wr='1' THEN
+        GROM(to_integer(rom_aw(10 DOWNTO 0)))<=rom_dw;
+      END IF;
+      IF rom_exec_wr='1' AND rom_aw(0)='0' THEN
+        EXECROM_H(to_integer(rom_aw(12 DOWNTO 1)))<=rom_dw;
+      END IF;
+      IF rom_exec_wr='1' AND rom_aw(0)='1' THEN
+        EXECROM_L(to_integer(rom_aw(12 DOWNTO 1)))<=rom_dw;
+      END IF;
+      IF rom_ecs_wr='1' AND rom_aw(0)='0' THEN
+        ECSROM_H(to_integer(rom_aw(14 DOWNTO 1)))<=rom_dw;
+      END IF;
+      IF rom_ecs_wr='1' AND rom_aw(0)='1' THEN
+        ECSROM_L(to_integer(rom_aw(14 DOWNTO 1)))<=rom_dw;
+      END IF;
+    END IF;
+  END PROCESS ROM_WR;
   
   ------------------------------------------------------------------------------
   Mobs:PROCESS (clk,reset_na) IS
@@ -1091,3 +1122,4 @@ BEGIN
          mobx(3)(9) & mobx(2)(9) & mobx(1)(9) & mobx(0)(9);
   
 END ARCHITECTURE rtl;
+
