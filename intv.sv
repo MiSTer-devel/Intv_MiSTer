@@ -140,9 +140,9 @@ localparam CONF_STR = {
     "OCE,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
     "OB,Video standard,NTSC,PAL;",
     "O1,Swap Joystick,Off,On;",
-    "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;",
     "-;",
     "R0,Reset;",
+    "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;",
     "V,v",`BUILD_DATE
 };
 
