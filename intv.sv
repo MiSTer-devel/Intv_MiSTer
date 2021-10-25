@@ -207,13 +207,14 @@ wire [12:0] ary = (!ar) ? 12'd561 : 12'd0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XX XXXXXXXXXXXXXXXXXXX
+// XX XXXXXXXXXXXXXXXXXXXXX
 
 localparam CONF_STR = {
     "Intellivision;;",
     "-;",
     "FS,ROMINTBIN;",
     "O58,MAP,Auto,0,1,2,3,4,5,6,7,8,9;",
+    "OMN,Format,Auto,Raw,Intellicart;",
     "O9,ECS,Off,On;",
     "OA,Voice,On,Off;",
     "O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
@@ -272,6 +273,7 @@ wire swap    = status[1];
 wire ecs     = status[9];
 wire ivoice  =!status[10];
 wire [3:0] mapp    = status[8:5];
+wire [1:0] format  = status[23:22];
 
 wire [7:0] CORE_R,CORE_G,CORE_B;
 wire       CORE_HS,CORE_VS,CORE_DE,CORE_CE;
@@ -286,6 +288,7 @@ intv_core intv_core
     .ecs(ecs),
     .ivoice(ivoice),
     .mapp(mapp),
+    .format(format),
     .reset(RESET | status[0]),
     .vga_clk(CLK_VIDEO),
     .vga_ce(CORE_CE),

@@ -23,6 +23,7 @@ ENTITY intv_core IS
     ecs              : IN    std_logic;
     ivoice           : IN    std_logic;
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
+    format           : IN    std_logic_vector(1 DOWNTO 0);
     reset            : IN    std_logic;
     
     -- VGA
@@ -679,7 +680,7 @@ BEGIN
               state<=sROM;
               w_wrl<='0';
               w_wrh<='0';
-            ELSIF ioctl_dout=x"A8" THEN
+            ELSIF (ioctl_dout=x"A8" OR ((ioctl_dout AND x"DF")=x"41") OR format="10") AND format/="01" THEN
               state<=sDOWN_ROM;
               icart<='1';
             ELSE

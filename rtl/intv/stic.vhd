@@ -157,7 +157,7 @@ ARCHITECTURE rtl OF stic IS
     IF ry(11)='1' THEN -- YFLIP
       IF ry(7)='0' THEN v:=7-v; ELSE v:=15-v; END IF;
     END IF;
-    RETURN to_integer(ra(10 DOWNTO 3))*8 + v;
+    RETURN to_integer(ra(10 DOWNTO 3) AND ("1111111" & NOT ry(7)))*8 + v;
   END FUNCTION objadrs;
   
   -- Generate object pixel from GRAM/GROM character memory
