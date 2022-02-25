@@ -26,7 +26,7 @@ module emu
     input         RESET,
 
     //Must be passed to hps_io module
-    inout  [45:0] HPS_BUS,
+    inout  [48:0] HPS_BUS,
 
     //Base video clock. Usually equals to CLK_SYS.
     output        CLK_VIDEO,
@@ -252,8 +252,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .HPS_BUS(HPS_BUS),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
-    .joystick_analog_0(joystick_analog_0),
-    .joystick_analog_1(joystick_analog_1),
+    .joystick_l_analog_0(joystick_analog_0),
+    .joystick_l_analog_1(joystick_analog_1),
     .forced_scandoubler(forced_scandoubler),
     .gamma_bus(gamma_bus),
     .buttons(buttons),
