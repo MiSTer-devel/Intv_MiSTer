@@ -26,7 +26,7 @@ module emu
     input         RESET,
 
     //Must be passed to hps_io module
-    inout  [45:0] HPS_BUS,
+    inout  [48:0] HPS_BUS,
 
     //Base video clock. Usually equals to CLK_SYS.
     output        CLK_VIDEO,
@@ -49,6 +49,7 @@ module emu
     output        VGA_F1,
     output [1:0]  VGA_SL,
     output        VGA_SCALER, // Force VGA scaler
+	 output        VGA_DISABLE, // analog out is off
 
     input  [11:0] HDMI_WIDTH,
     input  [11:0] HDMI_HEIGHT,
@@ -212,18 +213,31 @@ wire [12:0] ary = (!ar) ? 12'd561 : 12'd0;
 localparam CONF_STR = {
     "Intellivision;;",
     "-;",
-    "FS,ROMINTBIN;",
+    "FS,INT;",
     "O58,MAP,Auto,0,1,2,3,4,5,6,7,8,9;",
     "OMN,Format,Auto,Raw,Intellicart;",
-    "O9,ECS,Off,On;",
-    "OA,Voice,On,Off;",
-    "O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-    "OCE,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
-    "d0OH,Vertical Crop,Disabled,216p(5x);",
-    "d0OIL,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
-    "OFG,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
-    "OB,Video standard,NTSC,PAL;",
-    "O1,Swap Joystick,Off,On;",
+	 "-;",
+
+	 "P1,Audio & Video;",
+	 "P1-;",
+	 "P1O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+    "P1OCE,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	 "P1-;",
+    "d0P1OH,Vertical Crop,Disabled,216p(5x);",
+    "d0P1OIL,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
+    "P1OFG,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+	 "P1-;",
+    "P1OB,Video standard,NTSC,PAL;",
+
+	 "P2,Input Options;",
+	 "P2-;",
+	 "P2O1,Swap Joystick,Off,On;",
+
+	 "P3,Hardware;",
+	 "P3-;",
+    "P3O9,ECS,Off,On;",
+    "P3OA,Voice,On,Off;",
+
     "-;",
     "R0,Reset;",
     "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;",
@@ -242,7 +256,7 @@ wire [24:0] ioctl_addr;
 wire [7:0]  ioctl_dout;
 wire        ioctl_wait;
 wire [31:0] joystick_0,joystick_1;
-wire [15:0] joystick_analog_0,joystick_analog_1;
+wire [15:0] joystick_l_analog_0,joystick_l_analog_1;
 wire [21:0] gamma_bus;
 wire clk_sys,pll_locked;
 
@@ -252,8 +266,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .HPS_BUS(HPS_BUS),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
-    .joystick_analog_0(joystick_analog_0),
-    .joystick_analog_1(joystick_analog_1),
+    .joystick_l_analog_0(joystick_l_analog_0),
+    .joystick_l_analog_1(joystick_l_analog_1),
     .forced_scandoubler(forced_scandoubler),
     .gamma_bus(gamma_bus),
     .buttons(buttons),
@@ -302,8 +316,8 @@ intv_core intv_core
     .vga_hb(CORE_HBLANK),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
-    .joystick_analog_0(joystick_analog_0),
-    .joystick_analog_1(joystick_analog_1),
+    .joystick_l_analog_0(joystick_l_analog_0),
+    .joystick_l_analog_1(joystick_l_analog_1),
     .ioctl_download(ioctl_download),
     .ioctl_index(ioctl_index),
     .ioctl_wr(ioctl_wr),
