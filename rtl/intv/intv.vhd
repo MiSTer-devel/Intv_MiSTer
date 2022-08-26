@@ -41,8 +41,8 @@ ENTITY intv_core IS
     -- HPS IO
     joystick_0        : IN  unsigned(31 DOWNTO 0);
     joystick_1        : IN  unsigned(31 DOWNTO 0);
-    joystick_analog_0 : IN  unsigned(15 DOWNTO 0);
-    joystick_analog_1 : IN  unsigned(15 DOWNTO 0);
+    joystick_l_analog_0 : IN  unsigned(15 DOWNTO 0);
+    joystick_l_analog_1 : IN  unsigned(15 DOWNTO 0);
     ioctl_download    : IN  std_logic;
     ioctl_index       : IN  std_logic_vector(7 DOWNTO 0);
     ioctl_wr          : IN  std_logic;
@@ -936,7 +936,7 @@ BEGIN
   
   PROCESS (key_1,key_2,key_3,key_4,key_5,key_6,key_7,key_8,key_9,
            key_0,key_r,key_w,key_space,key_enter,swap,
-           joystick_0,joystick_1,joystick_analog_0,joystick_analog_1) IS
+           joystick_0,joystick_1,joystick_l_analog_0,joystick_l_analog_1) IS
     CONSTANT dirtable : arr_uv8(0 TO 15):= (-- NSWE
       x"00", -- 0000 : no press
       x"02", -- 0001 : E
@@ -978,8 +978,8 @@ BEGIN
   BEGIN
     -- PORT A
     io_v:=dirtable(to_integer(unsigned(joystick_0(3 DOWNTO 0)))); -- Direction cross
-    io_v:=io_v OR dir16(to_integer((unsigned(joystick_analog_0( 7 DOWNTO 4)) + x"8") &
-                                   (unsigned(joystick_analog_0(15 DOWNTO 12))  + x"8")));
+    io_v:=io_v OR dir16(to_integer((unsigned(joystick_l_analog_0( 7 DOWNTO 4)) + x"8") &
+                                   (unsigned(joystick_l_analog_0(15 DOWNTO 12))  + x"8")));
     io_v:=io_v OR ("10100000" AND sext(joystick_0( 4),8)); -- Action UP
     io_v:=io_v OR ("01100000" AND sext(joystick_0( 5),8)); -- Action BL
     io_v:=io_v OR ("11000000" AND sext(joystick_0( 6),8)); -- Action BR
@@ -1020,8 +1020,8 @@ BEGIN
     ---------------------------------
     -- PORT B
     io2_v:=dirtable(to_integer(unsigned(joystick_1(3 DOWNTO 0))));
-    io2_v:=io2_v OR dir16(to_integer((unsigned(joystick_analog_1( 7 DOWNTO 4)) + x"8") &
-                                     (unsigned(joystick_analog_1(15 DOWNTO 12))  + x"8")));
+    io2_v:=io2_v OR dir16(to_integer((unsigned(joystick_l_analog_1( 7 DOWNTO 4)) + x"8") &
+                                     (unsigned(joystick_l_analog_1(15 DOWNTO 12))  + x"8")));
     io2_v:=io2_v OR ("10100000" AND sext(joystick_1( 4),8)); -- Action UP
     io2_v:=io2_v OR ("01100000" AND sext(joystick_1( 5),8)); -- Action BL
     io2_v:=io2_v OR ("11000000" AND sext(joystick_1( 6),8)); -- Action BR
