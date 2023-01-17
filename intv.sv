@@ -26,7 +26,7 @@ module emu
     input         RESET,
 
     //Must be passed to hps_io module
-    inout  [45:0] HPS_BUS,
+    inout  [48:0] HPS_BUS,
 
     //Base video clock. Usually equals to CLK_SYS.
     output        CLK_VIDEO,
@@ -49,51 +49,16 @@ module emu
     output        VGA_F1,
     output [1:0]  VGA_SL,
     output        VGA_SCALER, // Force VGA scaler
+    output        VGA_DISABLE,
 
     input  [11:0] HDMI_WIDTH,
     input  [11:0] HDMI_HEIGHT,
     output        HDMI_FREEZE,
 
-`ifdef MISTER_FB
-    // Use framebuffer in DDRAM (USE_FB=1 in qsf)
-    // FB_FORMAT:
-    //    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
-    //    [3]   : 0=16bits 565 1=16bits 1555
-    //    [4]   : 0=RGB  1=BGR (for 16/24/32 modes)
-    //
-    // FB_STRIDE either 0 (rounded to 256 bytes) or multiple of pixel size (in bytes)
-    output        FB_EN,
-    output  [4:0] FB_FORMAT,
-    output [11:0] FB_WIDTH,
-    output [11:0] FB_HEIGHT,
-    output [31:0] FB_BASE,
-    output [13:0] FB_STRIDE,
-    input         FB_VBL,
-    input         FB_LL,
-    output        FB_FORCE_BLANK,
-
-`ifdef MISTER_FB_PALETTE
-    // Palette control for 8bit modes.
-    // Ignored for other video modes.
-    output        FB_PAL_CLK,
-    output  [7:0] FB_PAL_ADDR,
-    output [23:0] FB_PAL_DOUT,
-    input  [23:0] FB_PAL_DIN,
-    output        FB_PAL_WR,
-`endif
-`endif
-
     output        LED_USER,  // 1 - ON, 0 - OFF.
-
-    // b[1]: 0 - LED status is system status OR'd with b[0]
-    //       1 - LED status is controled solely by b[0]
-    // hint: supply 2'b00 to let the system control the LED.
     output  [1:0] LED_POWER,
     output  [1:0] LED_DISK,
 
-    // I/O board button press simulation (active high)
-    // b[1]: user button
-    // b[0]: osd button
     output  [1:0] BUTTONS,
 
     input         CLK_AUDIO, // 24.576 MHz
@@ -190,7 +155,7 @@ assign LED_POWER = 0;
 assign HDMI_FREEZE = 0;
 
 assign VGA_SCALER= 0;
-
+assign VGA_DISABLE = 0;
 assign BUTTONS = 0;
 
 //////////////////////////////////////////////////////////////////
@@ -242,7 +207,7 @@ wire [24:0] ioctl_addr;
 wire [7:0]  ioctl_dout;
 wire        ioctl_wait;
 wire [31:0] joystick_0,joystick_1;
-wire [15:0] joystick_analog_0,joystick_analog_1;
+wire [15:0] joystick_analog_l,joystick_analog_r;
 wire [21:0] gamma_bus;
 wire clk_sys,pll_locked;
 
@@ -252,8 +217,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .HPS_BUS(HPS_BUS),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
-    .joystick_analog_0(joystick_analog_0),
-    .joystick_analog_1(joystick_analog_1),
+    .joystick_l_analog_0(joystick_analog_l),
+    .joystick_r_analog_0(joystick_analog_r),
     .forced_scandoubler(forced_scandoubler),
     .gamma_bus(gamma_bus),
     .buttons(buttons),
@@ -302,8 +267,8 @@ intv_core intv_core
     .vga_hb(CORE_HBLANK),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
-    .joystick_analog_0(joystick_analog_0),
-    .joystick_analog_1(joystick_analog_1),
+    .joystick_analog_0(joystick_analog_l),
+    .joystick_analog_1(joystick_analog_r),
     .ioctl_download(ioctl_download),
     .ioctl_index(ioctl_index),
     .ioctl_wr(ioctl_wr),
