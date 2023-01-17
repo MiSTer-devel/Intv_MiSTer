@@ -527,7 +527,8 @@ BEGIN
       snd2_dw <=dw(7 DOWNTO 0);
       ivoice_dw<=dw;
       icart_dw<=dw;
-      
+      cart_dw<=dw;
+		
       -- 14 bits registers
       -- 0000-0007 MOB X position regs ? ? ? Xsize VISB INTR X[7:0]
       -- 0008-000F MOB Y position regs ? ? Yflip Xflip Ysz4 Ysz2 Yres Y[6:0]
