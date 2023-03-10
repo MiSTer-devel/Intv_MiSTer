@@ -398,8 +398,8 @@ ARCHITECTURE rtl OF ascal IS
 		RETURN 1;
 	END FUNCTION;
 	FUNCTION buf_offset(b : natural RANGE 0 TO 2;
-	                 base : unsigned(31 DOWNTO 0);
-	                 size : unsigned(31 DOWNTO 0)) RETURN unsigned IS
+								base : unsigned(31 DOWNTO 0);
+								size : unsigned(31 DOWNTO 0)) RETURN unsigned IS
 	BEGIN
 		IF b=1 THEN RETURN base+size; END IF;
 		IF b=2 THEN RETURN base+(size(30 DOWNTO 0) & '0'); END IF;
@@ -499,6 +499,7 @@ ARCHITECTURE rtl OF ascal IS
 	SIGNAL o_vpix_outer : arr_pix(0 TO 2);
 	SIGNAL o_vpix_inner : arr_pix(0 TO 6);
 
+
 	SIGNAL o_vpe : std_logic;
 	SIGNAL o_div : arr_div(0 TO 2); --uint12;
 	SIGNAL o_dir : arr_frac(0 TO 2);
@@ -522,16 +523,16 @@ ARCHITECTURE rtl OF ascal IS
 				RETURN shift(32 TO 119) & pix.r & pix.g & pix.b & x"00";
 			WHEN OTHERS => -- 16bpp 565
 				RETURN shift(16 TO 119) &
-				      pix.g(4 DOWNTO 2) & pix.r(7 DOWNTO 3) &
-				      pix.b(7 DOWNTO 3) & pix.g(7 DOWNTO 5);
+					pix.g(4 DOWNTO 2) & pix.r(7 DOWNTO 3) &
+					pix.b(7 DOWNTO 3) & pix.g(7 DOWNTO 5);
 		END CASE;
 	END FUNCTION;
 
-	FUNCTION shift_ipack(i_dw   : unsigned(N_DW-1 DOWNTO 0);
-	                     acpt   : natural RANGE 0 TO 15;
-	                     shift  : unsigned(0 TO 119);
-	                     pix    : type_pix;
-	                     format : unsigned(1 DOWNTO 0)) RETURN unsigned IS
+	FUNCTION shift_ipack( i_dw   : unsigned(N_DW-1 DOWNTO 0);
+								 acpt   : natural RANGE 0 TO 15;
+								 shift  : unsigned(0 TO 119);
+								 pix    : type_pix;
+								 format : unsigned(1 DOWNTO 0)) RETURN unsigned IS
 		VARIABLE dw : unsigned(N_DW-1 DOWNTO 0);
 	BEGIN
 		dw:=i_dw;
@@ -562,7 +563,7 @@ ARCHITECTURE rtl OF ascal IS
 	END FUNCTION;
 
 	FUNCTION shift_inext (acpt   : natural RANGE 0 TO 15;
-	                      format : unsigned(1 DOWNTO 0)) RETURN boolean IS
+								 format : unsigned(1 DOWNTO 0)) RETURN boolean IS
 	BEGIN
 		CASE format IS
 			WHEN "01" => -- 24bpp
@@ -578,9 +579,9 @@ ARCHITECTURE rtl OF ascal IS
 	END FUNCTION;
 
 	FUNCTION shift_opack(acpt   : natural RANGE 0 TO 15;
-	                     shift  : unsigned(0 TO N_DW+15);
-	                     dr     : unsigned(N_DW-1 DOWNTO 0);
-	                     format : unsigned(5 DOWNTO 0)) RETURN unsigned IS
+								shift  : unsigned(0 TO N_DW+15);
+								dr     : unsigned(N_DW-1 DOWNTO 0);
+								format : unsigned(5 DOWNTO 0)) RETURN unsigned IS
 		VARIABLE shift_v : unsigned(0 TO N_DW+15);
 	BEGIN
 		CASE format(2 DOWNTO 0) IS
@@ -631,7 +632,7 @@ ARCHITECTURE rtl OF ascal IS
 	END FUNCTION;
 
 	FUNCTION shift_onext (acpt   : natural RANGE 0 TO 15;
-	                      format : unsigned(5 DOWNTO 0)) RETURN boolean IS
+								 format : unsigned(5 DOWNTO 0)) RETURN boolean IS
 	BEGIN
 		CASE format(2 DOWNTO 0) IS
 			WHEN "011" => -- 8bpp
@@ -650,7 +651,7 @@ ARCHITECTURE rtl OF ascal IS
 	END FUNCTION;
 
 	FUNCTION shift_opix (shift  : unsigned(0 TO N_DW+15);
-	                     format : unsigned(5 DOWNTO 0)) RETURN type_pix IS
+											 format : unsigned(5 DOWNTO 0)) RETURN type_pix IS
 	BEGIN
 		CASE format(3 DOWNTO 0) IS
 			WHEN "0100" => -- 16bpp 565
@@ -671,7 +672,7 @@ ARCHITECTURE rtl OF ascal IS
 	END FUNCTION;
 
 	FUNCTION pixoffset(adrs   : unsigned(31 DOWNTO 0);
-	                   format : unsigned (5 DOWNTO 0)) RETURN natural IS
+										 format : unsigned (5 DOWNTO 0)) RETURN natural IS
 	BEGIN
 		CASE format(2 DOWNTO 0) IS
 			WHEN "011" => -- 8bbp
@@ -709,7 +710,7 @@ ARCHITECTURE rtl OF ascal IS
 
 	-----------------------------------------------------------------------------
 	FUNCTION bound(a : unsigned;
-	               s : natural) RETURN unsigned IS
+								 s : natural) RETURN unsigned IS
 	BEGIN
 		IF a(a'left)='1' THEN
 			RETURN x"00";
@@ -745,7 +746,7 @@ ARCHITECTURE rtl OF ascal IS
 	END RECORD;
 
 	FUNCTION bil_calc(f : unsigned(FRAC-1 DOWNTO 0);
-	                  p : arr_pix(0 TO 3)) RETURN type_bil_t IS
+							p : arr_pix(0 TO 3)) RETURN type_bil_t IS
 		VARIABLE fp,fn : unsigned(FRAC DOWNTO 0);
 		VARIABLE u : unsigned(8+FRAC DOWNTO 0);
 		VARIABLE x : type_bil_t;
@@ -763,7 +764,7 @@ ARCHITECTURE rtl OF ascal IS
 	END FUNCTION;
 
 	FUNCTION near_calc(f : unsigned(FRAC-1 DOWNTO 0);
-	                   p : arr_pix(0 TO 3)) RETURN type_bil_t IS
+							 p : arr_pix(0 TO 3)) RETURN type_bil_t IS
 		VARIABLE fp,fn : unsigned(FRAC DOWNTO 0);
 		VARIABLE u : unsigned(8+FRAC DOWNTO 0);
 		VARIABLE x : type_bil_t;
@@ -855,7 +856,7 @@ ARCHITECTURE rtl OF ascal IS
 	-- D = -Y(-1)/2 + 3*Y(0)/2 - 3*Y(1)/2 + Y(2)/2   -2 .. +2   signed
 
 	FUNCTION bic_calc0(f : unsigned(11 DOWNTO 0);
-	                   pm,p0,p1,p2 : unsigned(7 DOWNTO 0)) RETURN type_bic_abcd IS
+							 pm,p0,p1,p2 : unsigned(7 DOWNTO 0)) RETURN type_bic_abcd IS
 		VARIABLE xx : signed(2*FRAC+1 DOWNTO 0); -- 2.(2*FRAC)
 	BEGIN
 		xx := signed('0' & f(11 DOWNTO 12-FRAC)) *
@@ -880,7 +881,7 @@ ARCHITECTURE rtl OF ascal IS
 	----------------------------------------------------------
 	-- Calc : B.X, C.XX, D.XX
 	FUNCTION bic_calc1(f    : unsigned(11 DOWNTO 0);
-	                   abcd : type_bic_pix_abcd) RETURN type_bic_tt1 IS
+							 abcd : type_bic_pix_abcd) RETURN type_bic_tt1 IS
 		VARIABLE t : type_bic_tt1;
 		VARIABLE bx : signed(9+FRAC DOWNTO 0); -- 1.(FRAC+9)
 		VARIABLE cxx : signed(20 DOWNTO 0); -- 4.17
@@ -910,8 +911,8 @@ ARCHITECTURE rtl OF ascal IS
 	----------------------------------------------------------
 	-- Calc A + BX + CXX , X.DXX
 	FUNCTION bic_calc2(f    : unsigned(11 DOWNTO 0);
-	                   t    : type_bic_tt1;
-	                   abcd : type_bic_pix_abcd) RETURN type_bic_tt2 IS
+							 t    : type_bic_tt1;
+							 abcd : type_bic_pix_abcd) RETURN type_bic_tt2 IS
 		VARIABLE u : type_bic_tt2;
 		VARIABLE x : signed(11+FRAC DOWNTO 0); -- 3.(9+FRAC)
 	BEGIN
@@ -931,8 +932,8 @@ ARCHITECTURE rtl OF ascal IS
 	----------------------------------------------------------
 	-- Calc  (A + BX + CXX) + (DXXX)
 	FUNCTION bic_calc3(f    : unsigned(11 DOWNTO 0);
-	                   t    : type_bic_tt2;
-	                   abcd : type_bic_pix_abcd) RETURN type_pix IS
+							 t    : type_bic_tt2;
+							 abcd : type_bic_pix_abcd) RETURN type_pix IS
 		VARIABLE x : type_pix;
 		VARIABLE v : signed(9 DOWNTO 0); -- 2.8
 	BEGIN
@@ -1003,7 +1004,7 @@ ARCHITECTURE rtl OF ascal IS
 
 	-- 6 DSP 18*18 + 18*18
 	FUNCTION poly_calc(fi : poly_phase_interp_t;
-	                   p  : arr_pix(0 TO 3)) RETURN type_poly_t IS
+							 p  : arr_pix(0 TO 3)) RETURN type_poly_t IS
 		VARIABLE t : type_poly_t;
 	BEGIN
 		-- 3.15 * 1.8 = 4.23
@@ -1033,9 +1034,9 @@ ARCHITECTURE rtl OF ascal IS
 
 	-- 4 DSP 18*18 + 18*18
 	FUNCTION poly_lerp(a  : poly_phase_t;
-	                   b  : poly_phase_t;
-	                   ta : SIGNED(9 DOWNTO 0);
-	                   tb : SIGNED(9 DOWNTO 0)) RETURN poly_phase_interp_t IS
+							 b  : poly_phase_t;
+							 ta : SIGNED(9 DOWNTO 0);
+							 tb : SIGNED(9 DOWNTO 0)) RETURN poly_phase_interp_t IS
 		VARIABLE v : poly_phase_interp_t;
 		VARIABLE t0,t1,t2,t3 : signed(19 DOWNTO 0);
 	BEGIN
@@ -1782,8 +1783,8 @@ BEGIN
 			o_vfrac<=x"000";
 --pragma synthesis_on
 		ELSIF rising_edge(o_clk) THEN
-			o_vdivi<=to_unsigned(o_vsize,13);
-			o_vdivr<=to_unsigned(o_vacc * 2048,25);
+			o_vdivi<=to_unsigned(2*o_vsize,13);
+			o_vdivr<=to_unsigned(o_vacc*4096,25);
 			------------------------------------------------------
 			IF o_divstart='1' THEN
 				o_divcpt<=0;
@@ -2900,14 +2901,14 @@ BEGIN
 	-----------------------------------------------------------------------------
 	-- Low Lag syntoniser interface
 	o_lltune<=(0 => i_vss,
-	           1 => i_pde,
-	           2 => i_inter,
-	           3 => i_flm,
-	           4 => o_vss,
-	           5 => i_pce,
-	           6 => i_clk,
-	           7 => o_clk,
-	           OTHERS =>'0');
+						 1 => i_pde,
+						 2 => i_inter,
+						 3 => i_flm,
+						 4 => o_vss,
+						 5 => i_pce,
+						 6 => i_clk,
+						 7 => o_clk,
+						 OTHERS =>'0');
 
 	----------------------------------------------------------------------------
 END ARCHITECTURE rtl;
