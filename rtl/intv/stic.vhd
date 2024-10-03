@@ -52,7 +52,7 @@ ENTITY stic IS
     busrq  : OUT std_logic; -- Bus Request
     busak  : IN  std_logic; -- Bus Acknowledge
     intrm  : OUT std_logic; -- Interrupt request maskable
-    phi    : IN std_logic; -- PHI clock enable
+    phi    : IN std_logic;  -- PHI clock enable
     
     pal    : IN  std_logic;
     ecs    : IN  std_logic;
@@ -128,7 +128,15 @@ ARCHITECTURE rtl OF stic IS
   CONSTANT HSTART : uint9 :=6; --20;
   CONSTANT VSTART : uint9 :=12;
   SIGNAL cyc : natural RANGE 0 TO 11;
+  SIGNAL intak : std_logic;
   
+  SIGNAL vbstart : std_logic;
+  SIGNAL vblank1, vblank2 : std_logic;
+  SIGNAL vblank_cpt : uint16;
+  
+  CONSTANT DELAY_VBLANK1 : natural := 2900 * 4; -- STIC ACCESSIBLE
+  CONSTANT DELAY_VBLANK2 : natural := 3796 * 4; -- GMEM ACCESSIBLE
+
   ------------------------------------------------
   TYPE type_col IS RECORD
     a : std_logic; -- 0=Transparent
@@ -302,7 +310,7 @@ ARCHITECTURE rtl OF stic IS
     VARIABLE h,v : boolean;
   BEGIN
     IF bext_l='0' THEN
-      h:=(hpos >= 8 + HSTART AND hpos <  7 + HSTART + 8*20);
+      h:=(hpos >= 8  + HSTART AND hpos <  7 + HSTART + 8*20);
     ELSE
       h:=(hpos >= 16 + HSTART AND hpos <  7 + HSTART + 8*20);
     END IF;
@@ -393,7 +401,24 @@ ARCHITECTURE rtl OF stic IS
     END IF;
     RETURN h OR v;
   END FUNCTION;
-  
+
+  -- STIC DATA READ. Return garbage if access outside VBLANK1
+  FUNCTION stic_rd(d      : uv16;
+                   padrs  : uint16;
+                   vblank : std_logic) RETURN uv16 IS
+  BEGIN
+  --  RETURN d;
+    IF vblank='1' THEN
+      RETURN d;
+    ELSE
+      IF padrs < 128 THEN
+        RETURN to_unsigned(padrs,16) AND x"000E";
+      ELSE
+        RETURN x"FFFF";
+      END IF;
+    END IF;
+  END FUNCTION;
+
   ------------------------------------------------
   SIGNAL pwr_x,pwr_y,pwr_a,pwr_c : std_logic;
   SIGNAL pwr_ecsram,pwr_sysram,pwr_gram,pwr_scram : std_logic;
@@ -416,7 +441,7 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL delay_h,delay_v : uv3;
   SIGNAL de,bext_l,bext_t : std_logic;
   SIGNAL border : uv4;
-  SIGNAL intrm_i : std_logic;
+  SIGNAL intrm_l : std_logic;
 
   SIGNAL a_mob : uint4;
   SIGNAL a_gmem : uint11;
@@ -468,6 +493,8 @@ BEGIN
       ----------------------------------
       pwr<='0';
       prd<='0';
+      intak <= to_std_logic(bdic=B_INTAK) AND phi;
+
       IF bdic=B_BAR OR bdic=B_ADAR OR bdic=B_INTAK THEN
         IF phi='1' THEN
           padrs<=to_integer(dw);
@@ -528,7 +555,11 @@ BEGIN
       ivoice_dw<=dw;
       icart_dw<=dw;
       cart_dw<=dw;
-		
+
+      IF intak='1' THEN
+        de <= '0';
+      END IF;
+
       -- 14 bits registers
       -- 0000-0007 MOB X position regs ? ? ? Xsize VISB INTR X[7:0]
       -- 0008-000F MOB Y position regs ? ? Yflip Xflip Ysz4 Ysz2 Yres Y[6:0]
@@ -555,85 +586,86 @@ BEGIN
       
       --  ELS
       IF padrs MOD 16384<8 THEN
-        dr<="00111" & pr_x(10 DOWNTO 0);
-        pwr_x<=pwr;
+        dr<=stic_rd("00111" & pr_x(10 DOWNTO 0),padrs,vblank1);
+        pwr_x<=pwr AND vblank1;
         
       ELSIF padrs MOD 16384<16 THEN
-        dr<="0011" & pr_y(11 DOWNTO 0);
-        pwr_y<=pwr;
+        dr<=stic_rd("0011" & pr_y(11 DOWNTO 0),padrs,vblank1);
+        pwr_y<=pwr AND vblank1;
         
       ELSIF padrs MOD 16384<24 THEN
-        dr<="00" & pr_a;
-        pwr_a<=pwr;
+        dr<=stic_rd("00" & pr_a,padrs,vblank1);
+        pwr_a<=pwr AND vblank1;
         
       ELSIF padrs MOD 16384<32 THEN
-        dr<="001111" & pr_c(9 DOWNTO 0);
-        pwr_c<=pwr;
+        dr<=stic_rd("001111" & pr_c(9 DOWNTO 0),padrs,vblank1);
+        pwr_c<=pwr AND vblank1;
         
       ELSIF padrs MOD 16384=32 THEN
-        dr<=x"0000"; -- Display Enable
-        IF prd='1' THEN
-          de<='0';
-        END IF;
-        IF pwr='1' THEN
-          de<='1';
+        dr<=stic_rd(x"0000",padrs,vblank1); -- Display Enable
+        IF vblank1='1' THEN
+          IF pwr='1' THEN
+            de<='1';
+          END IF;
         END IF;
         
       ELSIF padrs MOD 16384=33 THEN
-        dr<=x"0000"; -- Mode Select
-        IF prd='1' THEN
-          csmode<='1'; -- Color Stack Mode
+        dr<=stic_rd(x"0000",padrs,vblank1); -- Mode Select
+        IF vblank1='1' THEN
+          IF prd='1' THEN
+            csmode<='1'; -- Color Stack Mode
+          END IF;
+          IF pwr='1' THEN
+            csmode<='0'; -- FG / BG Mode
+          END IF;
         END IF;
-        IF pwr='1' THEN
-          csmode<='0'; -- FG / BG Mode
-        END IF;
-        
+
       ELSIF padrs MOD 16384=16#28# THEN
-        dr<=x"000" & cstack(0);
-        IF pwr='1' THEN
+        dr<=stic_rd(x"000" & cstack(0),padrs,vblank1);
+        IF pwr='1' AND vblank1='1' THEN
           cstack(0)<=dw(3 DOWNTO 0);
         END IF;
 
       ELSIF padrs MOD 16384=16#29# THEN
-        dr<=x"000" & cstack(1);
-        IF pwr='1' THEN
+        dr<=stic_rd(x"000" & cstack(1),padrs,vblank1);
+        IF pwr='1' AND vblank1='1' THEN
           cstack(1)<=dw(3 DOWNTO 0);
         END IF;
           
       ELSIF padrs MOD 16384=16#2A# THEN
-        dr<=x"000" & cstack(2);
-        IF pwr='1' THEN
+        dr<=stic_rd(x"000" & cstack(2),padrs,vblank1);
+        IF pwr='1' AND vblank1='1' THEN
           cstack(2)<=dw(3 DOWNTO 0);
         END IF;
           
       ELSIF padrs MOD 16384=16#2B# THEN
-        dr<=x"000" & cstack(3);
-        IF pwr='1' THEN
+        dr<=stic_rd(x"000" & cstack(3),padrs,vblank1);
+        IF pwr='1' AND vblank1='1' THEN
           cstack(3)<=dw(3 DOWNTO 0);
         END IF;
 
       ELSIF padrs MOD 16384=16#2C# THEN
-        dr<=x"000" & border;
-        IF pwr='1' THEN
+        dr<=stic_rd(x"000" & border,padrs,vblank1);
+        IF pwr='1' AND vblank1='1' THEN
           border<=dw(3 DOWNTO 0);
         END IF;
         
       ELSIF padrs MOD 16384=16#30# THEN
-        dr<="0000000000000" & delay_h;
+        dr<=stic_rd("0000000000000" & delay_h,padrs,vblank1);
         dr(15 DOWNTO 3)<=(OTHERS =>'0');
-        IF pwr='1' THEN
+        IF pwr='1' AND vblank1='1' THEN
           delay_h<=dw(2 DOWNTO 0);
         END IF;
           
       ELSIF padrs MOD 16384=16#31# THEN
-        dr<="0000000000000" & delay_v;
-        IF pwr='1' THEN
+        dr<=stic_rd("0000000000000" & delay_v,padrs,vblank1);
+        IF pwr='1' AND vblank1='1' THEN
           delay_v<=dw(2 DOWNTO 0);
         END IF;
 
       ELSIF padrs MOD 16384=16#32# THEN
-        dr<=x"000" & "00" & bext_t & bext_l;
-        IF pwr='1' THEN
+        dr<=stic_rd(x"000" & "00" & bext_t & bext_l,padrs,vblank1);
+        IF pwr='1' AND vblank1='1' THEN
           -- Border Extension bits
           bext_l<=dw(0);
           bext_t<=dw(1);
@@ -646,13 +678,21 @@ BEGIN
         
       -- GROM --------------------------
       ELSIF padrs>=16#3000# AND padrs<=16#37FF# THEN
-        dr<=x"00" & pr_grom;
+        IF vblank2='1' THEN
+          dr<=x"00" & pr_grom;
+        ELSE
+          dr<=to_unsigned(padrs,16) AND x"3FFF";
+        END IF;
         
       -- GRAM --------------------------
       ELSIF (padrs >=16#3800# AND padrs <=16#3FFF#) THEN
 --      ELSIF padrs MOD 16384>=16#3800# AND padrs MOD 16384<=16#39FF# THEN
-        dr<=x"00" & pr_gram;
-        pwr_gram<=pwr;
+        IF vblank2='1' THEN
+          dr<=x"00" & pr_gram;
+        ELSE
+          dr<=to_unsigned(padrs,16) AND x"3FFF";
+        END IF;
+        pwr_gram<=pwr AND vblank2;
         
       -- EXEC --------------------------
       ELSIF padrs>=16#1000# AND padrs<=16#1FFF# THEN
@@ -704,7 +744,7 @@ BEGIN
       IF (padrs>=16#7800# AND padrs<=16#7FFF#) OR
          (padrs>=16#B800# AND padrs<=16#BFFF#) OR
          (padrs>=16#F800# AND padrs<=16#FFFF#) THEN
-         pwr_gram<=pwr;
+         pwr_gram<=pwr AND vblank2;
       END IF;
       
       -- BANK SWITCH REG ---------------
@@ -726,7 +766,7 @@ BEGIN
       
       ----------------------------------
       IF bdic=B_IAB THEN -- Interrupt to Address Bus
-        IF intrm_i='1' THEN
+        IF intrm_l='1' THEN
           dr<=x"1004"; -- Interrupt vector
         ELSE
           dr<=x"1000"; -- RESET vector
@@ -735,6 +775,7 @@ BEGIN
       
       ----------------------------------
       bdrdy<='1';
+
       ----------------------------------
       IF reset_na='0' THEN
         delay_v<="000";
@@ -744,7 +785,7 @@ BEGIN
         bext_l<='0';
         csmode<='0';
         bank<=(OTHERS =>x"0");
-        de<='1';
+        de<='0';
       END IF;
     END IF;
   END PROCESS RegAcc;
@@ -931,7 +972,7 @@ BEGIN
     VARIABLE cpt_v : uint2;
   BEGIN
     IF reset_na='0' THEN
-      intrm_i<='0';
+      intrm_l<='0';
       busrq<='0';
       collset<=(x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00");
       collsetbg<=x"00";
@@ -945,10 +986,15 @@ BEGIN
       collset<=(x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00");
       collsetbg<=x"00";
       collsetborder<=x"00";
+
+      vbstart<='0'; -- VBLANK START
       
       ----------------------------------
       IF cyc<11 THEN cyc<=cyc+1; ELSE cyc<=0; END IF;
-      
+
+      ----------------------------------
+      -- Interrupt acknowledge
+
       ----------------------------------
       CASE cyc IS
         WHEN 0 => -- CLEAR, video sweep
@@ -967,16 +1013,13 @@ BEGIN
           over.a <='0';
           under.a<='0';
           IF hpos=0 AND vpos = 16 + VSTART + 8*12*2 THEN
-            intrm_i<='1';
+            intrm_l<='1';
+            vbstart<='1';
           END IF;
           IF hpos=0 AND vpos = 9 THEN
-            intrm_i<='0';
+            intrm_l<='0';
           END IF;
-          --IF de='0' THEN
-          --  hpos<=0;
-          --  vpos<=0;
-          --END IF;
-          
+  
         WHEN 1 => NULL;
           
         WHEN 2 TO 9 => -- Objects
@@ -1071,9 +1114,21 @@ BEGIN
       ----------------------------------
       -- Interrupt acknowledge
       IF bdic=B_IAB AND phi='1' THEN
-        intrm_i<='0';
+        intrm_l<='0';
+      END IF;
+
+      ----------------------------------
+      -- VBLANK
+      IF cyc = 0 AND vblank_cpt < 32768 THEN
+        vblank_cpt <= vblank_cpt + 1;
+      END IF;
+      IF vbstart='1' THEN
+        vblank_cpt <= 0;
       END IF;
       
+      vblank1 <= to_std_logic(vblank_cpt < DELAY_VBLANK1) OR NOT de;
+      vblank2 <= to_std_logic(vblank_cpt < DELAY_VBLANK2) OR NOT de;
+
       ----------------------------------
       -- BUSRQ (just for slowing down the CPU)
       IF (vpos=VSTART-1                             AND hpos=0) OR
@@ -1090,7 +1145,7 @@ BEGIN
          (vpos=VSTART+1+16*10 + to_integer(delay_v) AND hpos=0) OR
          (vpos=VSTART+1+16*11 + to_integer(delay_v) AND hpos=0) OR
          (vpos=VSTART+1+16*12 + to_integer(delay_v) AND hpos=0) THEN
-        busrq<='1';
+        busrq<=de;
       ELSIF (vpos=VSTART AND hpos=0) OR
          (vpos=VSTART+2       + to_integer(delay_v) AND hpos=212) OR
          (vpos=VSTART+2+16    + to_integer(delay_v) AND hpos=212) OR
@@ -1107,11 +1162,11 @@ BEGIN
          (vpos=VSTART+1+16*12 + to_integer(delay_v) AND hpos=176) THEN
         busrq<='0';
       END IF;
-      
+
     END IF;
   END PROCESS Sync;
 
-  intrm<=intrm_i;
+  intrm<=intrm_l;
   
   hits<=mobc(7)(7 DOWNTO 0) & mobc(6)(7 DOWNTO 0) &
         mobc(5)(7 DOWNTO 0) & mobc(4)(7 DOWNTO 0) &
