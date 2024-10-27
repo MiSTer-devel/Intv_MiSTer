@@ -57,8 +57,9 @@ ENTITY stic IS
     pal    : IN  std_logic;
     ecs    : IN  std_logic;
     ivoice : IN  std_logic;
+    jlp    : IN  std_logic;
     clear  : IN  std_logic;
-    
+
     ------------------------------------
     ad     : OUT uv16;
     
@@ -76,6 +77,11 @@ ENTITY stic IS
     ivoice_dr : IN  uv16;
     ivoice_dw : OUT uv16;
     ivoice_wr : OUT std_logic;
+
+    -- JLP
+    jlp_dr    : IN  uv16;
+    jlp_dw    : OUT uv16;
+    jlp_wr    : OUT std_logic;
     
     -- Cartridge
     cart_acc : IN std_logic;
@@ -449,6 +455,8 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL bg,fg,col : type_col;
   SIGNAL over,under : type_col;
   
+  SIGNAL jlp_ena : std_logic;
+
   ------------------------------------------------
   CONSTANT Z14 : uv14 :=(OTHERS =>'0');
   SIGNAL mobx,moby,moba,mobc : arr_uv14(0 TO 7) :=(OTHERS =>Z14);
@@ -546,15 +554,22 @@ BEGIN
       pwr_gram<='0';
       pwr_scram<='0';
 
-      snd_wr<='0';
-      snd2_wr<='0';
-      ivoice_wr<='0';
-      cart_wr<='0';
-      snd_dw  <=dw(7 DOWNTO 0);
-      snd2_dw <=dw(7 DOWNTO 0);
+      snd_wr    <='0';
+      snd2_wr   <='0';
+      ivoice_wr <='0';
+      cart_wr   <='0';
+      jlp_wr    <='0';
+
+      snd_dw   <=dw(7 DOWNTO 0);
+      snd2_dw  <=dw(7 DOWNTO 0);
       ivoice_dw<=dw;
-      icart_dw<=dw;
-      cart_dw<=dw;
+      icart_dw <=dw;
+      cart_dw  <=dw;
+      jlp_dw   <=dw;
+
+      jlp_ena <= '1';
+      ----------------------------------
+      bdrdy<='1';
 
       IF intak='1' THEN
         de <= '0';
@@ -585,6 +600,12 @@ BEGIN
       --  dr<=cart_dr;
       
       --  ELS
+            -- JLP ---------------------------
+--      IF jlp_ena='1' AND padrs >= 16#8000# AND padrs < 16#A000# THEN
+--        dr<=jlp_dr;
+--        jlp_wr <= pwr;
+--
+      --ELS
       IF padrs MOD 16384<8 THEN
         dr<=stic_rd("00111" & pr_x(10 DOWNTO 0),padrs,vblank1);
         pwr_x<=pwr AND vblank1;
@@ -732,7 +753,12 @@ BEGIN
         
       ELSIF padrs>=16#E000# AND padrs<=16#EFFF# AND ecs='1' AND bank(14)=x"1" THEN
         dr<=pr_ecsrom;
-        
+      
+      -- JLP ---------------------------
+      ELSIF jlp_ena='1' AND padrs >= 16#8000# AND padrs < 16#A000# THEN
+        dr     <= jlp_dr;
+        jlp_wr <= pwr;
+
       -- Cartridges --------------------
       ELSE
         dr<=cart_dr;
@@ -740,6 +766,17 @@ BEGIN
         
       END IF;
       
+      -- JLP Switches ------------------
+      IF padrs=16#8034# AND dw=x"6A7A" AND pwr='1' THEN
+        jlp_ena <= '0';
+      ELSIF padrs=16#8034# AND dw=x"4A5A" AND pwr='1' THEN
+        jlp_ena <= '1';
+      END IF;
+
+      IF jlp='0' THEN
+        jlp_ena <= '0';
+      END IF;
+
       -- GRAM write-sensitive aliases
       IF (padrs>=16#7800# AND padrs<=16#7FFF#) OR
          (padrs>=16#B800# AND padrs<=16#BFFF#) OR
@@ -773,9 +810,6 @@ BEGIN
         END IF;
       END IF;
       
-      ----------------------------------
-      bdrdy<='1';
-
       ----------------------------------
       IF reset_na='0' THEN
         delay_v<="000";

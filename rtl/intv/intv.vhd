@@ -22,6 +22,7 @@ ENTITY intv_core IS
     swap             : IN    std_logic;
     ecs              : IN    std_logic;
     ivoice           : IN    std_logic;
+    jlp              : IN    std_logic;
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
     format           : IN    std_logic_vector(1 DOWNTO 0);
     reset            : IN    std_logic;
@@ -43,14 +44,28 @@ ENTITY intv_core IS
     joystick_1        : IN  unsigned(31 DOWNTO 0);
     joystick_analog_0 : IN  unsigned(15 DOWNTO 0);
     joystick_analog_1 : IN  unsigned(15 DOWNTO 0);
+    ps2_key           : IN  std_logic_vector(10 DOWNTO 0);
+
     ioctl_download    : IN  std_logic;
     ioctl_index       : IN  std_logic_vector(7 DOWNTO 0);
     ioctl_wr          : IN  std_logic;
     ioctl_addr        : IN  std_logic_vector(24 DOWNTO 0);
     ioctl_dout        : IN  std_logic_vector(7 DOWNTO 0);
     ioctl_wait        : OUT std_logic;
-    ps2_key           : IN  std_logic_vector(10 DOWNTO 0);
-    
+
+    -- JLP RW FLASH
+    img_mounted       : IN std_logic;
+    img_size          : IN unsigned(63 DOWNTO 0);
+    img_readonly      : IN std_logic;
+    sd_lba            : OUT unsigned(31 DOWNTO 0);
+    sd_rd             : OUT std_logic;
+    sd_wr             : OUT std_logic;
+    sd_ack            : IN  std_logic;
+    sd_buff_addr      : IN  unsigned(8 DOWNTO 0);
+    sd_buff_dout      : IN  std_logic_vector(7 DOWNTO 0);
+    sd_buff_din       : OUT std_logic_vector(7 DOWNTO 0);
+    sd_buff_wr        : IN  std_logic;
+
     -- AUDIO
     audio_l          : OUT   std_logic_vector(15 DOWNTO 0);
     audio_r          : OUT   std_logic_vector(15 DOWNTO 0)
@@ -109,6 +124,8 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL cart_acc : std_logic;
   SIGNAL snd_dr,snd_dw,snd2_dr,snd2_dw : uv8;
   SIGNAL snd_wr,snd2_wr,cart_wr : std_logic;
+  SIGNAL jlp_dw, jlp_dr : uv16;
+  SIGNAL jlp_wr : std_logic;
   SIGNAL ivoice_dr,ivoice_dw : uv16;
   SIGNAL ivoice_wr : std_logic;
   SIGNAL ivoice_divi : uint9;
@@ -394,6 +411,7 @@ BEGIN
       pal         => pal,
       ecs         => ecs,
       ivoice      => ivoice,
+      jlp         => jlp,
       clear       => clear,
       ad          => ad,
       snd_dr      => snd_dr,
@@ -405,6 +423,9 @@ BEGIN
       ivoice_dr   => ivoice_dr,
       ivoice_dw   => ivoice_dw,
       ivoice_wr   => ivoice_wr,
+      jlp_dr      => jlp_dr,
+      jlp_dw      => jlp_dw,
+      jlp_wr      => jlp_wr,
       cart_acc    => cart_acc,
       cart_dr     => cart_dr,
       cart_dw     => cart_dw,
@@ -463,6 +484,27 @@ BEGIN
       tick     => tick_snd,
       clk      => clksys,
       reset_na => reset_na);
+
+  -- JLP Features
+  i_jlp: ENTITY work.jlp
+    PORT MAP (
+      ad           => ad,
+      dw           => jlp_dw,
+      dr           => jlp_dr,
+      wr           => jlp_wr,
+      img_mounted  => img_mounted,
+      img_size     => img_size,
+      img_readonly => img_readonly,
+      sd_lba       => sd_lba,
+      sd_rd        => sd_rd,
+      sd_wr        => sd_wr,
+      sd_ack       => sd_ack,
+      sd_buff_addr => sd_buff_addr,
+      sd_buff_dout => sd_buff_dout,
+      sd_buff_din  => sd_buff_din,
+      sd_buff_wr   => sd_buff_wr,
+      clk          => clksys,
+      reset_na     => reset_na);
   
   -- Intellivoice
   i_ivoice: ENTITY work.ivoice

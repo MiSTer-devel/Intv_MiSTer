@@ -172,7 +172,7 @@ wire [12:0] ary = (!ar) ? 12'd561 : 12'd0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XX XXXXXXXXXXXXXXXXXXXXX
+// XX XXXXXXXXXXXXXXXXXXXXXX
 
 localparam CONF_STR = {
     "Intellivision;;",
@@ -182,6 +182,8 @@ localparam CONF_STR = {
     "OMN,Format,Auto,Raw,Intellicart;",
     "O9,ECS,Off,On;",
     "OA,Voice,On,Off;",
+    "OO,JLP Acceleration,On,Off;",
+    "d1S0,SAV,JLP RW FLASH:;",
     "O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
     "OCE,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
     "d0OH,Vertical Crop,Disabled,216p(5x);",
@@ -206,6 +208,19 @@ wire        ioctl_wr;
 wire [24:0] ioctl_addr;
 wire [7:0]  ioctl_dout;
 wire        ioctl_wait;
+
+wire        img_mounted;
+wire [63:0] img_size;
+wire        img_readonly;
+wire [31:0] sd_lba;
+wire        sd_rd;
+wire        sd_wr;
+wire        sd_ack;
+wire  [8:0] sd_buff_addr;
+wire  [7:0] sd_buff_dout;
+wire  [7:0] sd_buff_din;
+wire         sd_buff_wr;
+
 wire [31:0] joystick_0,joystick_1;
 wire [15:0] joystick_analog_l,joystick_analog_r;
 wire [21:0] gamma_bus;
@@ -223,13 +238,26 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .gamma_bus(gamma_bus),
     .buttons(buttons),
     .status(status),
-    .status_menumask(en216p),
+    .status_menumask(menumask), //en216p),
     .ioctl_download(ioctl_download),
     .ioctl_index(ioctl_index),
     .ioctl_wr(ioctl_wr),
     .ioctl_addr(ioctl_addr),
     .ioctl_dout(ioctl_dout),
     .ioctl_wait(ioctl_wait),
+
+    .img_mounted(img_mounted),
+    .img_size(img_size),
+    .img_readonly(img_readonly),
+    .sd_lba('{sd_lba}),
+    .sd_rd(sd_rd),
+    .sd_wr(sd_wr),
+    .sd_ack(sd_ack),
+    .sd_buff_addr(sd_buff_addr),
+    .sd_buff_dout(sd_buff_dout),
+    .sd_buff_din('{sd_buff_din}),
+    .sd_buff_wr(sd_buff_wr),
+
     .ps2_key(ps2_key)
 );
 
@@ -237,6 +265,10 @@ wire pal     = status[11];
 wire swap    = status[1];
 wire ecs     = status[9];
 wire ivoice  =!status[10];
+wire jlp     =!status[24];
+
+wire [1:0] menumask = {jlp,en216p};
+
 wire [3:0] mapp    = status[8:5];
 wire [1:0] format  = status[23:22];
 
@@ -252,6 +284,7 @@ intv_core intv_core
     .swap(swap),
     .ecs(ecs),
     .ivoice(ivoice),
+    .jlp(jlp),
     .mapp(mapp),
     .format(format),
     .reset(RESET | status[0]),
@@ -269,13 +302,27 @@ intv_core intv_core
     .joystick_1(joystick_1),
     .joystick_analog_0(joystick_analog_l),
     .joystick_analog_1(joystick_analog_r),
+    .ps2_key(ps2_key),
+
     .ioctl_download(ioctl_download),
     .ioctl_index(ioctl_index),
     .ioctl_wr(ioctl_wr),
     .ioctl_addr(ioctl_addr),
     .ioctl_dout(ioctl_dout),
     .ioctl_wait(ioctl_wait),
-    .ps2_key(ps2_key),
+
+    .img_mounted(img_mounted),
+    .img_size(img_size),
+    .img_readonly(img_readonly),
+    .sd_lba(sd_lba),
+    .sd_rd(sd_rd),
+    .sd_wr(sd_wr),
+    .sd_ack(sd_ack),
+    .sd_buff_addr(sd_buff_addr),
+    .sd_buff_dout(sd_buff_dout),
+    .sd_buff_din(sd_buff_din),
+    .sd_buff_wr(sd_buff_wr),
+
     .audio_l(AUDIO_L),
     .audio_r(AUDIO_R)
 );
