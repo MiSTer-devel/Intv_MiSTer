@@ -84,10 +84,11 @@ ENTITY stic IS
     jlp_wr    : OUT std_logic;
     
     -- Cartridge
-    cart_acc : IN std_logic;
     cart_dr  : IN  uv16;
     cart_dw  : OUT uv16;
+    cart_rd  : OUT std_logic;
     cart_wr  : OUT std_logic;
+    cart_rdy : OUT std_logic;
     
     -- Intellicart Registers
     icart_dw : OUT uv16;
@@ -474,7 +475,7 @@ ARCHITECTURE rtl OF stic IS
 
   SIGNAL ecsram : arr_uv8(0 TO 2047):=(OTHERS =>x"00"); -- 2k * 8bits
   
-  SIGNAL EXECROM_L,EXECROM_H : arr_uv8(0 TO 4095); -- Executive ROM
+  SIGNAL EXECROM_L,EXECROM_H : arr_uv8(0 TO 4095) := (OTHERS => x"00"); -- Executive ROM
   
   SIGNAL ECSROM_L,ECSROM_H : arr_uv8(0 TO 16383); -- ECS ROM
   
@@ -557,6 +558,7 @@ BEGIN
       snd_wr    <='0';
       snd2_wr   <='0';
       ivoice_wr <='0';
+      cart_rd   <='0';
       cart_wr   <='0';
       jlp_wr    <='0';
 
@@ -592,20 +594,6 @@ BEGIN
       -- 0033-007F <reserved>
 
       -- STIC registers ----------------
-        
-      --IF padrs>=16#D000# AND padrs<=16#DFFF# THEN -- 4kw
-      --  dr<=cart_dr;
-        
-      --ELSIF padrs>=16#F000# AND padrs<=16#FFFF# THEN -- 4kw
-      --  dr<=cart_dr;
-      
-      --  ELS
-            -- JLP ---------------------------
---      IF jlp_ena='1' AND padrs >= 16#8000# AND padrs < 16#A000# THEN
---        dr<=jlp_dr;
---        jlp_wr <= pwr;
---
-      --ELS
       IF padrs MOD 16384<8 THEN
         dr<=stic_rd("00111" & pr_x(10 DOWNTO 0),padrs,vblank1);
         pwr_x<=pwr AND vblank1;
@@ -761,9 +749,9 @@ BEGIN
 
       -- Cartridges --------------------
       ELSE
-        dr<=cart_dr;
-        cart_wr<=pwr;
-        
+        dr      <= cart_dr;
+        cart_wr <= pwr;
+        cart_rd <= NOT pwr;
       END IF;
       
       -- JLP Switches ------------------
@@ -829,16 +817,16 @@ BEGIN
     VARIABLE ad_v : uint16;
   BEGIN
     IF rising_edge(clk) THEN
-      IF pwr_sysram='1' THEN sysram(padrs MOD 512)<=dwi(15 DOWNTO 0); END IF;
-      IF pwr_ecsram='1' THEN ecsram(padrs MOD 2048)<=dwi(7 DOWNTO 0); END IF;
-      IF pwr_gram='1'   THEN gram(padrs MOD 512)<=dwi(7 DOWNTO 0); END IF;
-      IF pwr_scram='1'  THEN scram(padrs MOD 256)<=dwi(7 DOWNTO 0); END IF;
+      IF pwr_sysram='1' THEN sysram(padrs MOD 512) <= dwi(15 DOWNTO 0); END IF;
+      IF pwr_ecsram='1' THEN ecsram(padrs MOD 2048)<= dwi(7 DOWNTO 0); END IF;
+      IF pwr_gram='1'   THEN gram(padrs MOD 512)   <= dwi(7 DOWNTO 0); END IF;
+      IF pwr_scram='1'  THEN scram(padrs MOD 256)  <= dwi(7 DOWNTO 0); END IF;
       
-      pr_sysram <=sysram(padrs MOD 512);
-      pr_ecsram <=ecsram(padrs MOD 2048);
-      pr_gram   <=gram(padrs MOD 512);
-      pr_scram  <=scram(padrs MOD 256);
-      pr_grom   <=GROM(padrs MOD 2048);
+      pr_sysram <= sysram(padrs MOD 512);
+      pr_ecsram <= ecsram(padrs MOD 2048);
+      pr_gram   <= gram  (padrs MOD 512);
+      pr_scram  <= scram (padrs MOD 256);
+      pr_grom   <= GROM  (padrs MOD 2048);
       pr_execrom(7 DOWNTO 0) <=EXECROM_L(padrs MOD 4096);
       pr_execrom(15 DOWNTO 8)<=EXECROM_H(padrs MOD 4096);
       
@@ -866,19 +854,19 @@ BEGIN
   BEGIN
     IF rising_edge(clk) THEN
       IF rom_grom_wr='1' THEN
-        GROM(to_integer(rom_aw(10 DOWNTO 0)))<=rom_dw;
+        GROM(to_integer(rom_aw(10 DOWNTO 0))) <= rom_dw;
       END IF;
       IF rom_exec_wr='1' AND rom_aw(0)='0' THEN
-        EXECROM_H(to_integer(rom_aw(12 DOWNTO 1)))<=rom_dw;
+        EXECROM_H(to_integer(rom_aw(12 DOWNTO 1))) <= rom_dw;
       END IF;
       IF rom_exec_wr='1' AND rom_aw(0)='1' THEN
-        EXECROM_L(to_integer(rom_aw(12 DOWNTO 1)))<=rom_dw;
+        EXECROM_L(to_integer(rom_aw(12 DOWNTO 1))) <= rom_dw;
       END IF;
       IF rom_ecs_wr='1' AND rom_aw(0)='0' THEN
-        ECSROM_H(to_integer(rom_aw(14 DOWNTO 1)))<=rom_dw;
+        ECSROM_H(to_integer(rom_aw(14 DOWNTO 1))) <= rom_dw;
       END IF;
       IF rom_ecs_wr='1' AND rom_aw(0)='1' THEN
-        ECSROM_L(to_integer(rom_aw(14 DOWNTO 1)))<=rom_dw;
+        ECSROM_L(to_integer(rom_aw(14 DOWNTO 1))) <= rom_dw;
       END IF;
     END IF;
   END PROCESS ROM_WR;

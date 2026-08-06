@@ -274,7 +274,7 @@ wire jlp     =!status[24];
 wire [1:0] menumask = {jlp,en216p};
 
 wire [3:0] mapp    = status[8:5];
-wire [1:0] format  = status[23:22];
+wire [1:0] format  = status[23:22]; // 00=AUTO 01=RAW 10=Intellicart
 
 wire [7:0] CORE_R,CORE_G,CORE_B;
 wire       CORE_HS,CORE_VS,CORE_DE,CORE_CE;
@@ -291,7 +291,20 @@ intv_core intv_core
     .jlp(jlp),
     .mapp(mapp),
     .format(format),
-    .reset(RESET | status[0]),
+    .reset(RESET | buttons[1]),
+    
+    .sdram_dq(SDRAM_DQ),
+    .sdram_a(SDRAM_A),
+    .sdram_dqml(SDRAM_DQML),
+    .sdram_dqmh(SDRAM_DQMH),
+    .sdram_ba(SDRAM_BA),
+    .sdram_ncs(SDRAM_nCS),
+    .sdram_nwe(SDRAM_nWE),
+    .sdram_nras(SDRAM_nRAS),
+    .sdram_ncas(SDRAM_nCAS),
+    .sdram_cke(SDRAM_CKE),
+    .sdram_clk(SDRAM_CLK),
+
     .vga_clk(CLK_VIDEO),
     .vga_ce(CORE_CE),
     .vga_r(CORE_R),
