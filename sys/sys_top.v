@@ -231,7 +231,7 @@ end
 
 // gp_in[31] = 0 - quick flag that FPGA is initialized (HPS reads 1 when FPGA is not in user mode)
 //                 used to avoid lockups while JTAG loading
-wire [31:0] gp_in = {1'b0, btn_user | btn[1], btn_osd | btn[0], io_dig, 8'd0, io_ver, io_ack, io_wide, io_dout | io_dout_sys};
+wire [31:0] gp_in = {1'b0, btn_user | btn[1], btn_osd | btn[0], io_dig, 7'd0, ~HDMI_TX_INT, io_ver, io_ack, io_wide, io_dout | io_dout_sys};
 wire [31:0] gp_out;
 
 wire  [1:0] io_ver = 1; // 0 - obsolete. 1 - optimized HPS I/O. 2,3 - reserved for future.
@@ -316,6 +316,7 @@ reg [31:0] cfg_custom_p2;
 
 reg  [4:0] vol_att;
 initial vol_att = 5'b11111;
+reg  [1:0] vol_boost = 0;
 
 reg  [11:0] coef_addr;
 reg  [9:0] coef_data;
@@ -357,8 +358,10 @@ always@(posedge clk_sys) begin
 	reg        vs_d0,vs_d1,vs_d2;
 	reg  [4:0] acx_att;
 	reg  [7:0] fb_crc;
+	reg  [1:0] sl_r;
 
 	coef_wr <= 0;
+	sl_r <= FB_EN ? 2'b00 : scanlines;
 
 `ifndef MISTER_DEBUG_NOHDMI
 	shadowmask_wr <= 0;
@@ -390,11 +393,21 @@ always@(posedge clk_sys) begin
 				acy1 <=  24'd6143386;
 				acy2 <= -24'd2023767;
 				areset <= 1;
+				io_dout_sys <= 'b11;
 			end
 			if(io_din[7:0] == 'h20) io_dout_sys <= 'b11;
+`ifdef MISTER_DISABLE_ADAPTIVE
+			if(io_din[7:0] == 'h2B) io_dout_sys <= {fb_en, sl_r, 4'b0110};
+`else
+			if(io_din[7:0] == 'h2B) io_dout_sys <= {fb_en, sl_r, 4'b0111};
+`endif
+			if(io_din[7:0] == 'h2F) io_dout_sys <= 1;
+			if(io_din[7:0] == 'h3E) io_dout_sys <= 1;
 `ifndef MISTER_DEBUG_NOHDMI
 			if(io_din[7:0] == 'h40) io_dout_sys <= fb_crc;
 `endif
+			if(io_din[7:0] == 'h42) io_dout_sys <= {1'b1, frame_cnt};
+			if(io_din[7:0] == 'h44) io_dout_sys <= 1;
 		end
 		else begin
 			cnt <= cnt + 1'd1;
@@ -461,7 +474,7 @@ always@(posedge clk_sys) begin
 			if(cmd == 'h38) vs_line <= io_din[11:0];
 			if(cmd == 'h39) begin
 				case(cnt[3:0])
-					 0: acx_att          <= io_din[4:0];
+					 0: {vol_boost,acx_att} <= io_din[6:0];
 					 1: aflt_rate[15:0]  <= io_din;
 					 2: aflt_rate[31:16] <= io_din;
 					 3: acx[15:0]        <= io_din;
@@ -512,7 +525,9 @@ always@(posedge clk_sys) begin
 					1: PhaseInc[15:0]         <= io_din;
 					2: PhaseInc[31:16]        <= io_din;
 					3: PhaseInc[39:32]        <= io_din[7:0];
+`ifndef MISTER_DUAL_SDRAM
 					6: subcarrier             <= io_din[0];
+`endif
 				endcase
 			end
 		end
@@ -531,6 +546,15 @@ always@(posedge clk_sys) begin
 
 	vs_d2 <= vs_d1;
 	if(~vs_d2 & vs_d1) vs_wait <= 0;
+end
+
+reg [7:0] frame_cnt;
+always @(posedge clk_sys) begin
+	reg vs_r, vs_old;
+	
+	vs_r <= vs_fix;
+	if(vs_r == vs_fix) vs_old <= vs_r;
+	if(~vs_old & vs_r) frame_cnt <= frame_cnt + 1'd1;
 end
 
 cyclonev_hps_interface_peripheral_uart uart
@@ -709,6 +733,9 @@ wire         bob_deint;
 		.DOWNSCALE_NN("true"),
 	`endif
 		.FRAC(8),
+`ifdef MENU_CORE
+		.N_BURST(2048),
+`endif
 		.N_DW(128),
 		.N_AW(28)
 	)
@@ -1397,38 +1424,39 @@ osd vga_osd
 wire vga_cs_osd;
 csync csync_vga(clk_vid, vga_hs_osd, vga_vs_osd, vga_cs_osd);
 
+`ifndef MISTER_DISABLE_YC
+	reg         pal_en;
+	reg         yc_en;
+	reg         cvbs;
+	reg  [16:0] ColorBurst_Range;
+	wire [23:0] yc_o;
+	wire        yc_hs, yc_vs, yc_cs, yc_de;
+
+	yc_out yc_out
+	(
+		.clk(clk_vid),
+		.PAL_EN(pal_en),
+		.CVBS(cvbs),
+		.PHASE_INC(PhaseInc),
+		.COLORBURST_RANGE(ColorBurst_Range),
+		.hsync(vga_hs_osd),
+		.vsync(vga_vs_osd),
+		.csync(vga_cs_osd),
+		.de(vga_de_osd),
+		.dout(yc_o),
+		.din(vga_data_osd),
+		.hsync_o(yc_hs),
+		.vsync_o(yc_vs),
+		.csync_o(yc_cs),
+		.de_o(yc_de)
+	);
+`endif
+
+reg  [39:0] PhaseInc;
+
 `ifndef MISTER_DUAL_SDRAM
-	`ifndef MISTER_DISABLE_YC
-		reg         pal_en;
-		reg         yc_en;
-		reg         cvbs;
-		reg  [16:0] ColorBurst_Range;
-		wire [23:0] yc_o;
-		wire        yc_hs, yc_vs, yc_cs, yc_de;
-
-		yc_out yc_out
-		(
-			.clk(clk_vid),
-			.PAL_EN(pal_en),
-			.CVBS(cvbs),
-			.PHASE_INC(PhaseInc),
-			.COLORBURST_RANGE(ColorBurst_Range),
-			.hsync(vga_hs_osd),
-			.vsync(vga_vs_osd),
-			.csync(vga_cs_osd),
-			.de(vga_de_osd),
-			.dout(yc_o),
-			.din(vga_data_osd),
-			.hsync_o(yc_hs),
-			.vsync_o(yc_vs),
-			.csync_o(yc_cs),
-			.de_o(yc_de)
-		);
-	`endif
-
 	// Subcarrier generation for external encoders (independent of YC module)
 	reg         subcarrier;
-	reg  [39:0] PhaseInc;
 
 	reg  [39:0] sub_accum;
 	always @(posedge clk_vid) sub_accum <= sub_accum + PhaseInc;
@@ -1555,6 +1583,7 @@ audio_out audio_out
 	.clk(clk_audio),
 
 	.att(vol_att),
+	.boost(vol_boost),
 	.mix(audio_mix),
 	.sample_rate(audio_96k),
 
@@ -1724,15 +1753,11 @@ wire [13:0] fb_stride;
 	assign fb_stride = 0;
 `endif
 
-reg  [1:0] sl_r;
-wire [1:0] sl = sl_r;
-always @(posedge clk_sys) sl_r <= FB_EN ? 2'b00 : scanlines;
-
 emu emu
 (
 	.CLK_50M(FPGA_CLK2_50),
 	.RESET(reset),
-	.HPS_BUS({fb_en, sl, f1, HDMI_TX_VS, 
+	.HPS_BUS({f1, HDMI_TX_VS, 
 				 clk_100m, clk_ihdmi,
 				 ce_hpix, hde_emu, hhs_fix, hvs_fix, 
 				 io_wait, clk_sys, io_fpga, io_uio, io_strobe, io_wide, io_din, io_dout}),
