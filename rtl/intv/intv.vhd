@@ -24,8 +24,12 @@ ENTITY intv_core IS
     ivoice           : IN    std_logic;
     jlp              : IN    std_logic;
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
-    format           : IN    std_logic_vector(1 DOWNTO 0);
+    format           : IN    std_logic;
     reset            : IN    std_logic;
+
+    ecsjlp_set       : OUT   std_logic;
+    ecs_up           : OUT   std_logic;
+    jlp_up           : OUT   std_logic;
 
     sdram_dq          : INOUT std_logic_vector(15 DOWNTO 0);
     sdram_a           : OUT   std_logic_vector(12 DOWNTO 0);
@@ -106,10 +110,10 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL key_minus,key_plus,key_reg,key_mem : std_logic;
   
   ----------------------------------------
-  SIGNAL reset_na : std_logic;
+  SIGNAL cpureset_n : std_logic;
   
   SIGNAL clkdiv,clkdivsnd,clkdivivoice : uint6 :=0;
-  SIGNAL tick_cpu,tick_cpup,tick_snd,tick_ivoice : std_logic;
+  SIGNAL phi_cpu,phi_cpup,phi_snd,phi_ivoice : std_logic;
     
   SIGNAL dr,dw,ad,cart_dr,cart_dw : uv16;
   SIGNAL snd_dr,snd_dw,snd2_dr,snd2_dw : uv8;
@@ -142,6 +146,15 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL icart_dw : uv16;
   SIGNAL icart_wr : std_logic;
 
+  -- CFG mapping file.
+  SIGNAL map_src_zone   : uv8;
+  SIGNAL map_dest_zone  : uv4;
+  SIGNAL map_dest_page  : uv4;
+  SIGNAL map_memattr    : uv2;
+  SIGNAL map_vars       : uv5;
+  SIGNAL parser         : std_logic;
+  SIGNAL ecspage        : arr_uv4(0 TO 15);
+  
   -------------------------------------
   -- SDRAM
   COMPONENT sdram IS
@@ -160,7 +173,7 @@ ARCHITECTURE struct OF intv_core IS
       SDRAM_CKE  : OUT   std_logic;
       SDRAM_CLK  : OUT   std_logic;
       wtbt       : IN    std_logic_vector(1 DOWNTO 0);
-      addr       : IN    std_logic_vector(24 DOWNTO 0);
+      addr       : IN    unsigned(24 DOWNTO 0);
       dout       : OUT   std_logic_vector(15 DOWNTO 0);
       din        : IN    std_logic_vector(15 DOWNTO 0);
       wr         : IN    std_logic;
@@ -172,7 +185,7 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL sdram_init  : std_logic;
   SIGNAL sdram_req   : std_logic;
   SIGNAL sdram_wtbt  : std_logic_vector(1 DOWNTO 0);
-  SIGNAL sdram_addr  : std_logic_vector(24 DOWNTO 0);
+  SIGNAL sdram_addr  : unsigned(24 DOWNTO 0);
   SIGNAL sdram_dout  : std_logic_vector(15 DOWNTO 0);
   SIGNAL sdram_din   : std_logic_vector(15 DOWNTO 0);
   SIGNAL sdram_wr    : std_logic;
@@ -188,32 +201,33 @@ ARCHITECTURE struct OF intv_core IS
 BEGIN 
 
   ----------------------------------------------------------
-  
   Clepsydre:PROCESS(clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN
-      tick_cpup<='0';
-      IF clkdiv/=12*4-1 THEN
+      -- CPU SPEED *3 when parsing CFG file
+      phi_cpup<='0';
+      IF (clkdiv/=3*4*4-1 AND parser='0') OR 
+         (clkdiv/=  4*4-1 AND parser='1') THEN
         clkdiv<=clkdiv+1;
       ELSE
         clkdiv<=0;
-        tick_cpup<='1';
+        phi_cpup<='1';
       END IF;
-      tick_cpu<=tick_cpup;
+      phi_cpu<=phi_cpup;
       
-      tick_snd<='0';
-      IF tick_cpu='1' THEN
+      phi_snd<='0';
+      IF phi_cpu='1' THEN
         clkdivsnd<=(clkdivsnd+1) MOD 4;
         IF clkdivsnd=0 THEN
-          tick_snd<='1';
+          phi_snd<='1';
         END IF;
       END IF;
       
       IF clkdivivoice=11 THEN
-        tick_ivoice<='1';
+        phi_ivoice<='1';
         clkdivivoice<=0;
       ELSE
-        tick_ivoice<='0';
+        phi_ivoice<='0';
         clkdivivoice<=clkdivivoice+1;
       END IF;
     END IF;
@@ -238,69 +252,75 @@ BEGIN
       busak    => busak,
       stpst    => '0',
       halt     => halt,
-      phi      => tick_cpu,
-      phip     => tick_cpup,
+      phi      => phi_cpu,
+      phip     => phi_cpup,
       clk      => clksys,
-      reset_na => reset_na);
+      reset_na => cpureset_n);
   
   -- STIC + SYSRAM + GRAM + GROM + Decoder
   i_stic: ENTITY work.stic
     PORT MAP (
-      dw          => dw,
-      dr          => dr,
-      bdic        => bdic,
-      bdrdy       => bdrdy,
-      busrq       => busrq,
-      busak       => busak,
-      intrm       => intrm,
-      phi         => tick_cpu,
-      pal         => pal,
-      ecs         => ecs,
-      ivoice      => ivoice,
-      jlp         => jlp,
-      clear       => clear,
-      ad          => ad,
-      snd_dr      => snd_dr,
-      snd_dw      => snd_dw,
-      snd_wr      => snd_wr,
-      snd2_dr     => snd2_dr,
-      snd2_dw     => snd2_dw,
-      snd2_wr     => snd2_wr,
-      ivoice_dr   => ivoice_dr,
-      ivoice_dw   => ivoice_dw,
-      ivoice_wr   => ivoice_wr,
-      jlp_dr      => jlp_dr,
-      jlp_dw      => jlp_dw,
-      jlp_wr      => jlp_wr,
-      cart_dr     => cart_dr,
-      cart_dw     => cart_dw,
-      cart_rd     => cart_rd,
-      cart_wr     => cart_wr,
-      cart_rdy    => cart_rdy,
-      icart_dw    => icart_dw,
-      icart_wr    => icart_wr,
-      rom_grom_wr => rom_grom_wr,
-      rom_exec_wr => rom_exec_wr,
-      rom_ecs_wr  => rom_ecs_wr,
-      rom_aw      => rom_aw,
-      rom_dw      => rom_dw,
-      vid_r       => vga_r_u,
-      vid_g       => vga_g_u,
-      vid_b       => vga_b_u,
-      vid_de      => vga_de_u,
-      vid_hs      => vga_hs,
-      vid_vs      => vga_vs,
-      vid_hb      => vga_hb,
-      vid_vb      => vga_vb,
-      vid_ce      => vga_ce_l,
-      clk         => clksys,
-      reset_na    => reset_na);
+      dw            => dw,
+      dr            => dr,
+      bdic          => bdic,
+      bdrdy         => bdrdy,
+      busrq         => busrq,
+      busak         => busak,
+      intrm         => intrm,
+      phi           => phi_cpu,
+      pal           => pal,
+      ecs           => ecs,
+      ivoice        => ivoice,
+      jlp           => jlp,
+      clear         => clear,
+      ad            => ad,
+      snd_dr        => snd_dr,
+      snd_dw        => snd_dw,
+      snd_wr        => snd_wr,
+      snd2_dr       => snd2_dr,
+      snd2_dw       => snd2_dw,
+      snd2_wr       => snd2_wr,
+      ivoice_dr     => ivoice_dr,
+      ivoice_dw     => ivoice_dw,
+      ivoice_wr     => ivoice_wr,
+      jlp_dr        => jlp_dr,
+      jlp_dw        => jlp_dw,
+      jlp_wr        => jlp_wr,
+      cart_dr       => cart_dr,
+      cart_dw       => cart_dw,
+      cart_rd       => cart_rd,
+      cart_wr       => cart_wr,
+      cart_rdy      => cart_rdy,
+      icart_dw      => icart_dw,
+      icart_wr      => icart_wr,
+      rom_grom_wr   => rom_grom_wr,
+      rom_exec_wr   => rom_exec_wr,
+      rom_ecs_wr    => rom_ecs_wr,
+      rom_aw        => rom_aw,
+      rom_dw        => rom_dw,
+      map_src_zone  => map_src_zone,
+      map_dest_zone => map_dest_zone,
+      map_dest_page => map_dest_page,
+      map_memattr   => map_memattr,
+      map_vars      => map_vars,
+      ecspage       => ecspage,
+      parser        => parser,
+      vid_r         => vga_r_u,
+      vid_g         => vga_g_u,
+      vid_b         => vga_b_u,
+      vid_de        => vga_de_u,
+      vid_hs        => vga_hs,
+      vid_vs        => vga_vs,
+      vid_hb        => vga_hb,
+      vid_vb        => vga_vb,
+      vid_ce        => vga_ce_l,
+      clk           => clksys,
+      cpureset_n    => cpureset_n);
 
   -- CARTRIDGE
   i_cart: ENTITY work.cart
     PORT MAP (
       mapp           => mapp,
-      ecs            => ecs,
       format         => format,
       ad             => ad,
       cart_dr        => cart_dr,
@@ -332,10 +352,22 @@ BEGIN
       rom_exec_wr    => rom_exec_wr,
       rom_ecs_wr     => rom_ecs_wr,
       rom_voice_wr   => rom_voice_wr,
-      phi            => tick_cpu,
+      map_src_zone   => map_src_zone,
+      map_dest_zone  => map_dest_zone,
+      map_dest_page  => map_dest_page,
+      map_memattr    => map_memattr,
+      map_vars       => map_vars,
+      ecspage        => ecspage,
+      parser         => parser,
+      ecs            => ecs,
+      jlp            => jlp,
+      ecsjlp_set     => ecsjlp_set,
+      ecs_up         => ecs_up,
+      jlp_up         => jlp_up,
+      phi            => phi_cpu,
       clksys         => clksys,
       reset          => reset,
-      reset_na       => reset_na,
+      cpureset_n     => cpureset_n,
       hwreset_n      => hwreset_n);
 
   -- SDRAM CTRL
@@ -376,9 +408,9 @@ BEGIN
       pb_i     => pb_i,
       pb_o     => pb_o,
       pb_en    => pb_en,
-      tick     => tick_snd,
+      tick     => phi_snd,
       clk      => clksys,
-      reset_na => reset_na);
+      reset_na => cpureset_n);
 
   -- Second audio ECS
   i_snd2: ENTITY work.snd
@@ -394,9 +426,9 @@ BEGIN
       pb_i     => pb2_i,
       pb_o     => pb2_o,
       pb_en    => pb2_en,
-      tick     => tick_snd,
+      tick     => phi_snd,
       clk      => clksys,
-      reset_na => reset_na);
+      reset_na => cpureset_n);
 
   -- JLP Features
   i_jlp: ENTITY work.jlp
@@ -417,7 +449,7 @@ BEGIN
       sd_buff_din  => sd_buff_din,
       sd_buff_wr   => sd_buff_wr,
       clk          => clksys,
-      reset_na     => reset_na);
+      reset_na     => cpureset_n);
   
   -- Intellivoice
   i_ivoice: ENTITY work.ivoice
@@ -426,15 +458,15 @@ BEGIN
       dw       => ivoice_dw,
       dr       => ivoice_dr,
       wr       => ivoice_wr,
-      tick_cpu => tick_cpu,
-      tick     => tick_ivoice,
+      phi_cpu  => phi_cpu,
+      phi      => phi_ivoice,
       divi     => ivoice_divi,
       sound    => sound_iv,
       rom_voice_wr => rom_voice_wr,
       rom_aw   => rom_aw,
       rom_dw   => rom_dw,
       clksys   => clksys,
-      reset_na => reset_na);
+      reset_na => cpureset_n);
   
   ivoice_divi<=358 WHEN pal='0' ELSE 400;
   
@@ -613,9 +645,9 @@ BEGIN
   END PROCESS;
   
   ----------------------------------------------------------
-  KeyCodes:PROCESS (clksys,reset_na) IS
+  KeyCodes:PROCESS (clksys,cpureset_n) IS
   BEGIN
-    IF reset_na='0' THEN
+    IF cpureset_n='0' THEN
          key_0<='0';  key_1<='0';  key_2<='0';  key_3<='0';  key_4<='0';
          key_5<='0';  key_6<='0';  key_7<='0';  key_8<='0';  key_9<='0';
          key_a<='0';  key_b<='0';  key_c<='0';  key_d<='0';  key_e<='0';  key_f<='0';
@@ -714,7 +746,7 @@ BEGIN
   vga_ce <=vga_ce_l;
   
   ----------------------------------------------------------
-  reset_na<=NOT reset AND pll_locked AND NOT ioctl_download AND NOT map_reset;
+  cpureset_n <=NOT reset AND pll_locked AND NOT ioctl_download AND NOT map_reset;
 
   hwreset_n<=NOT reset AND pll_locked;
   

@@ -68,6 +68,7 @@ PACKAGE base_pack IS
   TYPE arr_uv0_3 IS ARRAY(natural RANGE <>) OF uv0_3;
   TYPE arr_uv0_7 IS ARRAY(natural RANGE <>) OF uv0_7;
   
+  TYPE arr_uv2   IS ARRAY(natural RANGE <>) OF uv2;
   TYPE arr_uv4   IS ARRAY(natural RANGE <>) OF uv4;
   TYPE arr_uv8   IS ARRAY(natural RANGE <>) OF uv8;
   TYPE arr_uv16  IS ARRAY(natural RANGE <>) OF uv16;

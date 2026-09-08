@@ -40,6 +40,7 @@ USE std.textio.ALL;
 LIBRARY work;
 USE work.base_pack.ALL;
 USE work.cp1610_pack.ALL;
+USE work.parser_pack.ALL;
 
 ENTITY stic IS
   PORT (
@@ -88,7 +89,7 @@ ENTITY stic IS
     cart_dw  : OUT uv16;
     cart_rd  : OUT std_logic;
     cart_wr  : OUT std_logic;
-    cart_rdy : OUT std_logic;
+    cart_rdy : IN  std_logic;
     
     -- Intellicart Registers
     icart_dw : OUT uv16;
@@ -104,7 +105,16 @@ ENTITY stic IS
     rom_ecs_wr  : IN  std_logic;
     rom_aw      : IN  uv16;
     rom_dw      : IN  uv8;
-    
+
+    ------------------------------------
+    map_src_zone   : OUT uv8;
+    map_dest_zone  : OUT uv4;
+    map_dest_page  : OUT uv4;
+    map_memattr    : OUT uv2;
+    map_vars       : OUT uv5;
+    ecspage        : OUT arr_uv4(0 TO 15);
+    parser         : IN  std_logic;
+
     ------------------------------------
     -- Video out
     vid_r  : OUT uv8;
@@ -118,8 +128,8 @@ ENTITY stic IS
     vid_ce : OUT std_logic;
     
     ------------------------------------
-    clk      : IN std_logic; -- 12x Pixel Clock
-    reset_na : IN std_logic
+    clk        : IN std_logic; -- 12x Pixel Clock
+    cpureset_n : IN std_logic
     );
 END ENTITY stic;
 
@@ -143,6 +153,8 @@ ARCHITECTURE rtl OF stic IS
   
   CONSTANT DELAY_VBLANK1 : natural := 2900 * 4; -- STIC ACCESSIBLE
   CONSTANT DELAY_VBLANK2 : natural := 3796 * 4; -- GMEM ACCESSIBLE
+
+  SIGNAL phi2 : std_logic;
 
   ------------------------------------------------
   TYPE type_col IS RECORD
@@ -412,7 +424,7 @@ ARCHITECTURE rtl OF stic IS
   -- STIC DATA READ. Return garbage if access outside VBLANK1
   FUNCTION stic_rd(d      : uv16;
                    padrs  : uint16;
-                   vblank : std_logic) RETURN uv16 IS
+                   vblank : std_logic) RETURN unsigned IS
   BEGIN
   --  RETURN d;
     IF vblank='1' THEN
@@ -432,7 +444,7 @@ ARCHITECTURE rtl OF stic IS
   SIGNAL pr_x,pr_y,pr_a,pr_c : uv14;
   SIGNAL pr_sysram : uv16;
   SIGNAL pr_gram,pr_grom,pr_scram,pr_ecsram : uv8;
-  SIGNAL pr_execrom,pr_ecsrom : uv16;
+  SIGNAL pr_execrom,pr_ecsrom,pr_parserom : uv16;
   
   SIGNAL prd,pwr : std_logic;
   SIGNAL padrs,padrsc  : uint16;
@@ -479,7 +491,8 @@ ARCHITECTURE rtl OF stic IS
   
   SIGNAL ECSROM_L,ECSROM_H : arr_uv8(0 TO 16383); -- ECS ROM
   
-  SIGNAL bank : arr_uv4(0 TO 15);
+  CONSTANT PARSEROM : arr_uv16(0 TO 2047) := ROM_PARSER;
+  SIGNAL ecspage_l : arr_uv4(0 TO 15);
   
   CONSTANT PALETTE : arr_uv24(0 TO 15) := -- RRGGBB
     (x"0C0005",x"002DFF",x"FF3E00",x"C9D464", -- 8 primary
@@ -489,12 +502,14 @@ ARCHITECTURE rtl OF stic IS
 
   SIGNAL xxx_hit : boolean;
   SIGNAL xxx_pix : type_col;
-  
+
 BEGIN
   
   ------------------------------------------------------------------------------
   dwi<=dw WHEN clear='0' ELSE x"0000";
-  
+
+  ecspage <= ecspage_l;
+
   ------------------------------------------------------------------------------
   Adrs:PROCESS (clk) IS
   BEGIN
@@ -542,7 +557,7 @@ BEGIN
   END PROCESS Adrs;
   
   ------------------------------------------------------------------------------
-  RegAcc:PROCESS (clk,reset_na) IS
+  RegAcc:PROCESS (clk,cpureset_n) IS
   BEGIN
     IF rising_edge(clk) THEN
       ----------------------------------
@@ -570,13 +585,15 @@ BEGIN
       jlp_dw   <=dw;
 
       jlp_ena <= '1';
+
+      phi2  <= phi;
       ----------------------------------
       bdrdy<='1';
 
       IF intak='1' THEN
         de <= '0';
       END IF;
-
+      
       -- 14 bits registers
       -- 0000-0007 MOB X position regs ? ? ? Xsize VISB INTR X[7:0]
       -- 0008-000F MOB Y position regs ? ? Yflip Xflip Ysz4 Ysz2 Yres Y[6:0]
@@ -680,6 +697,10 @@ BEGIN
           bext_t<=dw(1);
         END IF;
         
+      ELSIF (padrs MOD 16384 >= 16#0060#) AND (padrs MOD 16384 <= 16#0067#) AND parser='1' THEN
+        -- Special mapping registers
+        NULL;
+
       -- SYSRAM ------------------------
       ELSIF padrs>=16#200# AND padrs<=16#3FF# THEN
         dr<=pr_sysram;
@@ -705,8 +726,15 @@ BEGIN
         
       -- EXEC --------------------------
       ELSIF padrs>=16#1000# AND padrs<=16#1FFF# THEN
-        dr<=pr_execrom;
-        
+        IF parser = '1' THEN
+          dr<=pr_parserom;
+        ELSE
+          dr<=pr_execrom;
+        END IF;
+      
+      ELSIF padrs>=16#2000# AND padrs<=16#2FFF# AND parser='1' THEN
+        dr <= pr_parserom;
+
       -- Scratch RAM -------------------
       ELSIF padrs>=16#0100# AND padrs<=16#01EF# THEN
         dr<=x"00" & pr_scram;
@@ -733,13 +761,13 @@ BEGIN
         pwr_ecsram<=pwr;
         
       -- ROM ECS -----------------------
-      ELSIF padrs  >=16#2000# AND padrs<=16#2FFF# AND ecs='1' AND bank(2)=x"1" THEN
+      ELSIF padrs  >=16#2000# AND padrs<=16#2FFF# AND ecs='1' AND ecspage_l(2)=x"1" THEN
         dr<=pr_ecsrom;
         
-      ELSIF padrs>=16#7000# AND padrs<=16#7FFF# AND ecs='1' AND bank(7)=x"0" THEN
+      ELSIF padrs>=16#7000# AND padrs<=16#7FFF# AND ecs='1' AND ecspage_l(7)=x"0" THEN
         dr<=pr_ecsrom;
         
-      ELSIF padrs>=16#E000# AND padrs<=16#EFFF# AND ecs='1' AND bank(14)=x"1" THEN
+      ELSIF padrs>=16#E000# AND padrs<=16#EFFF# AND ecs='1' AND ecspage_l(14)=x"1" THEN
         dr<=pr_ecsrom;
       
       -- JLP ---------------------------
@@ -773,14 +801,17 @@ BEGIN
       END IF;
       
       -- BANK SWITCH REG ---------------
-      IF padrs=16#2FFF# AND dw(15 DOWNTO 4)=x"2A5" AND pwr='1' AND ecs='1' THEN
-        bank(2)<=dw(3 DOWNTO 0);
-      END IF;
-      IF padrs=16#7FFF# AND dw(15 DOWNTO 4)=x"7A5" AND pwr='1' AND ecs='1' THEN
-        bank(7)<=dw(3 DOWNTO 0);
-      END IF;
-      IF padrs=16#EFFF# AND dw(15 DOWNTO 4)=x"EA5" AND pwr='1' AND ecs='1' THEN
-        bank(14)<=dw(3 DOWNTO 0);
+      -- ECS : Bankswitching is performed by writing $xA5y to location $xFFF
+      --         to switch the ROM that covers the range $x000 - $xFFF.
+      --       The value of y selects which 4K page to switch in out
+      --         of a possible set of 16 pages. (From JZINTV)
+      --       The 12K of ROM in the ECS resides in $2000 Page 1, $7000 Page 0, and $E000 Page 1.
+      --       The ECS comes out of reset with page 0 selected on all ROMs,
+      --                 meaning that only the $7000 ROM is visible at RESET time. 
+      
+      IF padrs MOD 4096 = 16#FFF# AND
+        dw(11 DOWNTO 4)=x"A5" AND dw(15 DOWNTO 12) = padrs / 4096 AND pwr='1' THEN
+        ecspage_l(padrs/4096) <= dw(3 DOWNTO 0);
       END IF;
       
       -- INTELLICART REGS --------------
@@ -788,7 +819,29 @@ BEGIN
       IF padrs>=16#40# AND padrs<=16#5F# THEN
         icart_wr<=pwr;
       END IF;
-      
+
+      -- Configuration space -----------
+      IF padrs=16#0060# AND pwr='1' AND phi2='1' AND parser='1' THEN
+        map_src_zone(3 DOWNTO 0) <= dw(15 DOWNTO 12);
+      END IF;
+      IF padrs=16#0061# AND pwr='1' AND phi2='1' AND parser='1' THEN
+        map_src_zone(7 DOWNTO 4) <= dw(3 DOWNTO 0);
+      END IF;
+      IF padrs=16#0062# AND pwr='1' AND phi2='1' AND parser='1' THEN
+        map_dest_zone <= dw(15 DOWNTO 12);
+      END IF;
+      IF padrs=16#0063# AND pwr='1' AND phi2='1' AND parser='1' THEN
+        map_dest_page <= dw(3 DOWNTO 0);
+      END IF;
+      IF padrs=16#0064# AND pwr='1' AND phi2='1' AND parser='1' THEN
+        map_memattr  <= dw(1 DOWNTO 0);
+      END IF;
+
+      map_vars <= "00000";
+      IF padrs=16#0065# AND pwr='1' AND phi2='1' AND parser='1' THEN
+        map_vars   <= dw(4 DOWNTO 0);
+      END IF;
+
       ----------------------------------
       IF bdic=B_IAB THEN -- Interrupt to Address Bus
         IF intrm_l='1' THEN
@@ -799,15 +852,16 @@ BEGIN
       END IF;
       
       ----------------------------------
-      IF reset_na='0' THEN
+      IF cpureset_n='0' THEN
         delay_v<="000";
         delay_h<="000";
         border<="0000";
         bext_t<='0';
         bext_l<='0';
         csmode<='0';
-        bank<=(OTHERS =>x"0");
+        ecspage_l<=(OTHERS =>x"0");
         de<='0';
+
       END IF;
     END IF;
   END PROCESS RegAcc;
@@ -817,10 +871,10 @@ BEGIN
     VARIABLE ad_v : uint16;
   BEGIN
     IF rising_edge(clk) THEN
-      IF pwr_sysram='1' THEN sysram(padrs MOD 512) <= dwi(15 DOWNTO 0); END IF;
-      IF pwr_ecsram='1' THEN ecsram(padrs MOD 2048)<= dwi(7 DOWNTO 0); END IF;
-      IF pwr_gram='1'   THEN gram(padrs MOD 512)   <= dwi(7 DOWNTO 0); END IF;
-      IF pwr_scram='1'  THEN scram(padrs MOD 256)  <= dwi(7 DOWNTO 0); END IF;
+      IF pwr_sysram='1' THEN sysram(padrs MOD 512)  <= dwi(15 DOWNTO 0); END IF;
+      IF pwr_ecsram='1' THEN ecsram(padrs MOD 2048) <= dwi(7 DOWNTO 0); END IF;
+      IF pwr_gram='1'   THEN gram(padrs MOD 512)    <= dwi(7 DOWNTO 0); END IF;
+      IF pwr_scram='1'  THEN scram(padrs MOD 256)   <= dwi(7 DOWNTO 0); END IF;
       
       pr_sysram <= sysram(padrs MOD 512);
       pr_ecsram <= ecsram(padrs MOD 2048);
@@ -829,6 +883,7 @@ BEGIN
       pr_grom   <= GROM  (padrs MOD 2048);
       pr_execrom(7 DOWNTO 0) <=EXECROM_L(padrs MOD 4096);
       pr_execrom(15 DOWNTO 8)<=EXECROM_H(padrs MOD 4096);
+      pr_parserom            <=PARSEROM (padrs MOD 2048);
       
       IF padrs>=16#2000# AND padrs<=16#2FFF# THEN
         ad_v:=padrs - 16#2000#;
@@ -840,12 +895,12 @@ BEGIN
         ad_v:=padrs MOD 4096;
       END IF;
       
-      pr_ecsrom(7 DOWNTO 0) <=ECSROM_L(ad_v);
-      pr_ecsrom(15 DOWNTO 8)<=ECSROM_H(ad_v);
+      pr_ecsrom(7 DOWNTO 0)  <= ECSROM_L(ad_v);
+      pr_ecsrom(15 DOWNTO 8) <= ECSROM_H(ad_v);
       
-      r_gram <=gram(a_gmem MOD 512);
-      r_sysram<=sysram(a_sysram);
-      r_grom <=GROM(a_gmem MOD 2048);
+      r_gram  <= gram(a_gmem MOD 512);
+      r_sysram<= sysram(a_sysram);
+      r_grom  <= GROM(a_gmem MOD 2048);
       
     END IF;
   END PROCESS Mem;
@@ -872,9 +927,9 @@ BEGIN
   END PROCESS ROM_WR;
   
   ------------------------------------------------------------------------------
-  Mobs:PROCESS (clk,reset_na) IS
+  Mobs:PROCESS (clk,cpureset_n) IS
   BEGIN
-    IF reset_na='0' THEN
+    IF cpureset_n='0' THEN
       mobx<=(OTHERS =>"00000000000000");
       moby<=(OTHERS =>"00000000000000");
       moba<=(OTHERS =>"00000000000000");
@@ -989,11 +1044,11 @@ BEGIN
   vlen <=262    WHEN pal='0' ELSE 313;
   
   ------------------------------------------------------------------------------
-  Sync:PROCESS(clk,reset_na) IS
+  Sync:PROCESS(clk,cpureset_n) IS
     VARIABLE p_v : type_col;
     VARIABLE cpt_v : uint2;
   BEGIN
-    IF reset_na='0' THEN
+    IF cpureset_n='0' THEN
       intrm_l<='0';
       busrq<='0';
       collset<=(x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00");

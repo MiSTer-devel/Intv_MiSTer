@@ -176,14 +176,15 @@ wire [12:0] ary = (!ar) ? 12'd561 : 12'd0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XX XXXXXXXXXXXXXXXXXXXXXX
+// XX XXXXXXXXXXXXXXXXXXXX XX
 
 localparam CONF_STR = {
     "Intellivision;;",
     "-;",
-    "FS,ROMINTBIN;",
-    "O58,MAP,Auto,0,1,2,3,4,5,6,7,8,9;",
-    "OMN,Format,Auto,Raw,Intellicart;",
+    "F1,ROMINTBIN,Cartridge;",
+    "OM,Format,Raw & Intellicart,CFG mapping;",
+    "d3O58,MAP,Auto,0,1,2,3,4,5,6,7,8,9;",
+    "d2F2,CFG,CFG Mapping;",
     "O9,ECS,Off,On;",
     "OA,Voice,On,Off;",
     "OO,JLP Acceleration,On,Off;",
@@ -204,6 +205,12 @@ localparam CONF_STR = {
 wire forced_scandoubler;
 wire  [1:0] buttons;
 wire [63:0] status;
+wire [63:0] status_in;
+
+wire        ecsjlp_set;
+wire        ecs_up;
+wire        jlp_up;
+
 wire [10:0] ps2_key;
 
 wire        ioctl_download;
@@ -223,7 +230,8 @@ wire        sd_ack;
 wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
 wire  [7:0] sd_buff_din;
-wire         sd_buff_wr;
+wire        sd_buff_wr;
+
 
 wire [31:0] joystick_0,joystick_1;
 wire [15:0] joystick_analog_l,joystick_analog_r;
@@ -242,7 +250,9 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .gamma_bus(gamma_bus),
     .buttons(buttons),
     .status(status),
-    .status_menumask(menumask), //en216p),
+    .status_in(status_in),
+    .status_set(ecsjlp_set),
+    .status_menumask(menumask),
     .ioctl_download(ioctl_download),
     .ioctl_index(ioctl_index),
     .ioctl_wr(ioctl_wr),
@@ -271,10 +281,12 @@ wire ecs     = status[9];
 wire ivoice  =!status[10];
 wire jlp     =!status[24];
 
-wire [1:0] menumask = {jlp,en216p};
+wire [3:0] menumask = {!format,format,jlp,en216p};
 
 wire [3:0] mapp    = status[8:5];
-wire [1:0] format  = status[23:22]; // 00=AUTO 01=RAW 10=Intellicart
+wire       format  = status[22]; // 0=AUTO+ICART 1=CFG
+
+assign status_in = {status[63:25],!jlp_up,status[23:10],ecs_up,status[8:0]};
 
 wire [7:0] CORE_R,CORE_G,CORE_B;
 wire       CORE_HS,CORE_VS,CORE_DE,CORE_CE;
@@ -293,6 +305,10 @@ intv_core intv_core
     .format(format),
     .reset(RESET | buttons[1]),
     
+    .ecsjlp_set(ecsjlp_set),
+    .ecs_up(ecs_up),
+    .jlp_up(jlp_up),
+
     .sdram_dq(SDRAM_DQ),
     .sdram_a(SDRAM_A),
     .sdram_dqml(SDRAM_DQML),

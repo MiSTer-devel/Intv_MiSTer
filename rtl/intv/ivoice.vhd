@@ -12,7 +12,7 @@
 -- CLKSYS NTSC : 3.579545MHz * 12
 -- CLKSYS PAL  : 4MHz * 12
 
--- TICK = CLKSYS / 12
+-- PHI = CLKSYS / 12
 -- DIVI NTSC : 358 => 9.9987kHz
 -- DIVI PAL  : 400 => 10kHz
 
@@ -28,17 +28,17 @@ USE work.base_pack.ALL;
 ENTITY ivoice IS
   PORT (
     --------------------------
-    ad        : IN  uv16;
-    dw        : IN  uv16;
-    dr        : OUT uv16;
-    wr        : IN  std_logic;
-    tick_cpu  : IN  std_logic;
+    ad       : IN  uv16;
+    dw       : IN  uv16;
+    dr       : OUT uv16;
+    wr       : IN  std_logic;
+    phi_cpu  : IN  std_logic;
     
     --------------------------
-    tick      : IN  std_logic; -- 3.58MHz ... 4MHz
-    divi      : in  natural;   -- 358 ... 400
+    phi      : IN  std_logic; -- 3.58MHz ... 4MHz
+    divi     : in  natural;   -- 358 ... 400
     
-    sound     : OUT sv16;
+    sound    : OUT sv16;
     
     --------------------------
     rom_voice_wr : IN  std_logic;
@@ -789,9 +789,9 @@ ARCHITECTURE rtl OF ivoice IS
   SIGNAL lfsr : uv15;
   SIGNAL diff : uv8;
   SIGNAL count : uv8;
-  SIGNAL tick2,tick3,tick4 : std_logic;
+  SIGNAL phi2,phi3,phi4 : std_logic;
   SIGNAL divcpt : uint9;
-  SIGNAL tickper : std_logic;
+  SIGNAL phiper : std_logic;
   SIGNAL noise : boolean;
   SIGNAL ald,ald_clr : std_logic;
   SIGNAL ald_ad : uv8;
@@ -829,7 +829,7 @@ BEGIN
       dr<=x"0000";
       IF ad=x"0080" THEN
         dr(15)<=NOT ald;
-        IF wr='1' AND tick_cpu='1' AND ald='0' THEN
+        IF wr='1' AND phi_cpu='1' AND ald='0' THEN
           -- Address Load
           ald_ad<=dw(7 DOWNTO 0);
           ald<='1';
@@ -845,7 +845,7 @@ BEGIN
       IF ad=x"0081" THEN 
         fifo_wd<=dw(9 DOWNTO 0);
         -- Speech FIFO. Write=Push data. Read = Get FIFO full flag
-        push<=wr AND tick_cpu AND to_std_logic(fifo_lev<62);
+        push<=wr AND phi_cpu AND to_std_logic(fifo_lev<62);
         IF dw(10)='1' and wr='1' THEN
           reset<='1';
         END IF;
@@ -901,7 +901,7 @@ BEGIN
   fifod<=fifo_rd & fifo_rd2;
   
   -- Mem access
-  rom_a<=to_integer(pc(18 DOWNTO 3)) WHEN tick2='1' ELSE
+  rom_a<=to_integer(pc(18 DOWNTO 3)) WHEN phi2='1' ELSE
          to_integer(pc(18 DOWNTO 3))+1;
   
   rom_dr<=ROMVOICE(rom_a MOD 2048) WHEN rising_edge(clksys);
@@ -930,7 +930,7 @@ BEGIN
   PROCESS (clksys) IS
   BEGIN
     IF rising_edge(clksys) THEN
-      IF reg_wr='1' AND tick2='1' THEN
+      IF reg_wr='1' AND phi2='1' THEN
         regs(reg_a)<=reg_dw;
       END IF;
     END IF;
@@ -994,18 +994,18 @@ BEGIN
       END IF;
       
       ------------------------------------------------------
-      tick2<=tick;
-      tick3<=tick2;
-      tick4<=tick3;
+      phi2<=phi;
+      phi3<=phi2;
+      phi4<=phi3;
       state2<=state;
       
       len_v:=0;
       pop2<='0';
       branch_v:=false;
       
-      IF tick3='1' THEN
+      IF phi3='1' THEN
         romd(7 DOWNTO 0)<=rom_dr;
-      ELSIF tick4='1' THEN
+      ELSIF phi4='1' THEN
         romd(15 DOWNTO 8)<=rom_dr;
       END IF;
       
@@ -1019,25 +1019,25 @@ BEGIN
       ------------------------------------------------------
       ald_clr<='0';
       
-      IF tick='1' THEN
+      IF phi='1' THEN
         IF divcpt+1=divi-1 THEN
           divcpt<=0;
-          tickper<='1';
+          phiper<='1';
         ELSE
           divcpt<=divcpt+1;
-          tickper<='0';
+          phiper<='0';
         END IF;
       END IF;
       
       -----------------------------------------------------
-      IF tick='1' THEN -- 1MHz
+      IF phi='1' THEN -- 1MHz
         len_v:=0;
         reg_wr<='0';
         
         CASE state IS
           -------------------------------------------------
           WHEN sIDLE =>
-            IF tickper='1' THEN -- 10KHz sampling rate
+            IF phiper='1' THEN -- 10KHz sampling rate
               IF act='1' AND nexti THEN
                 state<=sDECODE1;
               ELSIF (repeat/="000000" AND repeat/="000001") AND act='1' THEN
@@ -1396,7 +1396,7 @@ BEGIN
           pop_double<='0';
         END IF;
         
-      END IF; -- tick='1'
+      END IF; -- phi='1'
       
       ---------------------------------------------------
     END IF;

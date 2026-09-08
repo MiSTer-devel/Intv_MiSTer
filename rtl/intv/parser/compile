@@ -1,0 +1,4 @@
+# !! Copy as1600 from JZINTV archive !!
+./as1600 par.asm -o par.bin -l par.lst -s par.syn -m
+./par_pkg
+cp parser_pack.vhd ..
