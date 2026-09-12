@@ -99,7 +99,6 @@ ARCHITECTURE rtl OF cart IS
   SIGNAL remapped : std_logic;
 
   SIGNAL ioctl_wait_l,ioctl_download2,ioctl_wr2 : std_logic;
-  SIGNAL ioctl_idx : uint6;
 
   SIGNAL map_cpt : uint4;
   
@@ -466,8 +465,6 @@ BEGIN
     END IF;
   END PROCESS CRCCalc;
 
-  ioctl_idx <= to_integer(unsigned(ioctl_index(5 DOWNTO 0)));
-  
   ---------------------------------------------------------
   ReadRom:PROCESS(clksys) IS
     VARIABLE wre_v : std_logic;
@@ -532,10 +529,10 @@ BEGIN
           IF ioctl_download='0' THEN
             state <= sIDLE;
             
-          ELSIF ioctl_idx=0 THEN
+          ELSIF ioctl_index(5 DOWNTO 0)="000000" THEN
             state <= sROM;
 
-          ELSIF ioctl_idx=1 THEN
+          ELSIF ioctl_index(5 DOWNTO 0)="000001" THEN
             IF ioctl_wr='1' AND ioctl_wait_l='0' AND
               (ioctl_dout=x"A8" OR ((ioctl_dout AND x"DF")=x"41")) THEN
               state <= sDOWN_ICART_CLR;
@@ -554,7 +551,7 @@ BEGIN
               cfgmode <= format;
             END IF;
 
-          ELSIF ioctl_idx=2 THEN
+          ELSIF ioctl_index(5 DOWNTO 0)="000010" THEN
             IF ioctl_wr='1' AND ioctl_wait_l='0' THEN
               state <= sDOWN_CFG;
               icart <= '0';
@@ -571,11 +568,11 @@ BEGIN
           -- Internal ROMs : EXEC,GROM,VOICE,ECS
         WHEN sROM =>
           rom_aw<=unsigned(ioctl_addr(15 DOWNTO 0));
-          IF unsigned(ioctl_addr)<16#2000# AND ioctl_idx=0 THEN
+          IF unsigned(ioctl_addr)<16#2000# AND unsigned(ioctl_index)=0 THEN
             rom_exec_wr<=wre_v;
             rom_exec_up<=rom_exec_up OR wre_v;
 
-          ELSIF (unsigned(ioctl_addr)<16#2800# AND ioctl_idx=0) OR
+          ELSIF (unsigned(ioctl_addr)<16#2800# AND unsigned(ioctl_index)=0) OR
             unsigned(ioctl_index)=16#40# THEN
             rom_grom_wr<=wre_v;
             rom_grom_up<=rom_grom_up OR wre_v;
