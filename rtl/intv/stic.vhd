@@ -187,6 +187,7 @@ ARCHITECTURE rtl OF stic IS
     RETURN to_integer(ra(10 DOWNTO 3) AND ("1111111" & NOT ry(7)))*8 + v;
   END FUNCTION objadrs;
   
+  ---------------------------------------------------------
   -- Generate object pixel from GRAM/GROM character memory
   FUNCTION objpix(hpos      : uint9;
                   delay_h   : uv3;
@@ -213,6 +214,7 @@ ARCHITECTURE rtl OF stic IS
     RETURN (col=>ra(12) & ra(2 DOWNTO 0),a=>m(ch));
   END FUNCTION;
 
+  ---------------------------------------------------------
   FUNCTION objhit(hpos    : uint9;
                   vpos    : uint9;
                   delay_h : uv3;
@@ -243,7 +245,7 @@ ARCHITECTURE rtl OF stic IS
     RETURN h AND v;
   END FUNCTION;
   
-  ------------------------------------------------
+  ---------------------------------------------------------
   -- Background access in SYSRAM
   FUNCTION cartadrs(hpos,vpos : uint9;
                     delay_h,delay_v : uv3) RETURN uint12 IS
@@ -254,6 +256,7 @@ ARCHITECTURE rtl OF stic IS
      RETURN i;
   END FUNCTION;
   
+  ---------------------------------------------------------
   FUNCTION bgadrs(vpos : uint9;
                   delay_v : uv3;
                   csmode : std_logic;
@@ -270,6 +273,7 @@ ARCHITECTURE rtl OF stic IS
     END IF;
   END FUNCTION;
   
+  ---------------------------------------------------------
   -- Generate background pixel from SYSRAM memory
   FUNCTION bgpix (
     hpos,vpos  : uint9;
@@ -277,6 +281,7 @@ ARCHITECTURE rtl OF stic IS
     csmode  : std_logic; -- 1=Color Stack Mode, 0=FGBG mode
     gram,grom : uv8;
     cstack : uv4;
+    border : uv4;
     dr : uv16) RETURN type_col IS
     VARIABLE col : uv4;
     VARIABLE v : type_col;
@@ -320,9 +325,16 @@ ARCHITECTURE rtl OF stic IS
       END IF;
       v:=(col=>col,a=>m(7-ch));
     END IF;
+    -- Extend border beside shifted background
+    IF hpos < HSTART + 8 + to_integer(delay_h) OR
+       vpos < VSTART + 16 + 2*to_integer(delay_v) THEN
+      v.a   := '0';
+      v.col := border;
+    END IF;
     RETURN v;
   END FUNCTION;
-  
+
+  ---------------------------------------------------------
   FUNCTION visible(hpos : uint9;
                    vpos : uint9;
                    bext_l,bext_t : std_logic) RETURN boolean IS
@@ -341,6 +353,7 @@ ARCHITECTURE rtl OF stic IS
     RETURN h AND v;
   END FUNCTION;
 
+ ----------------------------------------------------------
  ---- MOB-to-MOB collisions are evaluated within the visible screen and the
  --   1 pixel border surrounding the screen.  
 
@@ -364,6 +377,7 @@ ARCHITECTURE rtl OF stic IS
     RETURN h AND v;
   END FUNCTION;
 
+ ----------------------------------------------------------
  ---- MOB-to-BACKTAB collisions are evaluated within the visible screen and
  --   one column to the right of the visible screen.  That's it.  
 
@@ -388,6 +402,7 @@ ARCHITECTURE rtl OF stic IS
     RETURN h AND v;
   END FUNCTION;
 
+ ----------------------------------------------------------
  ---- MOB-to-Border collisions are evaluated on a 1-pixel-wide border around
  --   the visible screen.
  --     -- Horizontal and vertical delay are taken into account.
@@ -421,6 +436,7 @@ ARCHITECTURE rtl OF stic IS
     RETURN h OR v;
   END FUNCTION;
 
+ ----------------------------------------------------------
   -- STIC DATA READ. Return garbage if access outside VBLANK1
   FUNCTION stic_rd(d      : uv16;
                    padrs  : uint16;
@@ -438,7 +454,7 @@ ARCHITECTURE rtl OF stic IS
     END IF;
   END FUNCTION;
 
-  ------------------------------------------------
+  ---------------------------------------------------------
   SIGNAL pwr_x,pwr_y,pwr_a,pwr_c : std_logic;
   SIGNAL pwr_ecsram,pwr_sysram,pwr_gram,pwr_scram : std_logic;
   SIGNAL pr_x,pr_y,pr_a,pr_c : uv14;
@@ -808,7 +824,6 @@ BEGIN
       --       The 12K of ROM in the ECS resides in $2000 Page 1, $7000 Page 0, and $E000 Page 1.
       --       The ECS comes out of reset with page 0 selected on all ROMs,
       --                 meaning that only the $7000 ROM is visible at RESET time. 
-      
       IF padrs MOD 4096 = 16#FFF# AND
         dw(11 DOWNTO 4)=x"A5" AND dw(15 DOWNTO 12) = padrs / 4096 AND pwr='1' THEN
         ecspage_l(padrs/4096) <= dw(3 DOWNTO 0);
@@ -1070,9 +1085,6 @@ BEGIN
       IF cyc<11 THEN cyc<=cyc+1; ELSE cyc<=0; END IF;
 
       ----------------------------------
-      -- Interrupt acknowledge
-
-      ----------------------------------
       CASE cyc IS
         WHEN 0 => -- CLEAR, video sweep
           IF hpos<hlen-1 THEN
@@ -1126,7 +1138,6 @@ BEGIN
             cpt_v:=(cstack_cpt+1) MOD 4;
             cstack_cpt<=cpt_v;
           END IF;
-
           IF hpos=0 AND 
             (((vpos - VSTART) - 2*to_integer(delay_v)+64) MOD 16)=0 THEN
             cstack_cpt_mem<=cstack_cpt;
@@ -1135,9 +1146,9 @@ BEGIN
             (((vpos - VSTART) - 2*to_integer(delay_v)+64) MOD 16)/=0 THEN
             cstack_cpt<=cstack_cpt_mem;
           END IF;
-                    
+          
           bg<=bgpix(hpos,vpos,delay_h,delay_v,csmode,r_gram,r_grom,
-                    cstack(cpt_v),r_sysram);
+                    cstack(cpt_v),border,r_sysram);
           
         WHEN 11 =>
           IF NOT visible(hpos,vpos,bext_l,bext_t) THEN
