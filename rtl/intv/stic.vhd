@@ -60,6 +60,7 @@ ENTITY stic IS
     ivoice : IN  std_logic;
     jlp    : IN  std_logic;
     clear  : IN  std_logic;
+    pause  : IN  std_logic;
 
     ------------------------------------
     ad     : OUT uv16;
@@ -95,10 +96,6 @@ ENTITY stic IS
     icart_dw : OUT uv16;
     icart_wr : OUT std_logic;
     
-    hits  : OUT uv64;
-    hitbg : OUT uv8;
-    hitbo : OUT uv8;
-    
     ------------------------------------
     rom_grom_wr : IN  std_logic;
     rom_exec_wr : IN  std_logic;
@@ -114,6 +111,9 @@ ENTITY stic IS
     map_vars       : OUT uv5;
     ecspage        : OUT arr_uv4(0 TO 15);
     parser         : IN  std_logic;
+
+    ------------------------------------
+    hvsync : OUT std_logic;
 
     ------------------------------------
     -- Video out
@@ -1080,6 +1080,7 @@ BEGIN
       collsetborder<=x"00";
 
       vbstart<='0'; -- VBLANK START
+      hvsync <= '0'; -- Top of screen
       
       ----------------------------------
       IF cyc<11 THEN cyc<=cyc+1; ELSE cyc<=0; END IF;
@@ -1097,12 +1098,13 @@ BEGIN
               vpos<=0;
               cstack_cpt<=0;
               cstack_cpt_mem<=0;
+              hvsync <= '1';
             END IF;
           END IF;
           over.a <='0';
           under.a<='0';
           IF hpos=0 AND vpos = 16 + VSTART + 8*12*2 THEN
-            intrm_l<='1';
+            intrm_l<=NOT pause; --'1';
             vbstart<='1';
           END IF;
           IF hpos=0 AND vpos = 9 THEN
@@ -1255,15 +1257,6 @@ BEGIN
   END PROCESS Sync;
 
   intrm<=intrm_l;
-  
-  hits<=mobc(7)(7 DOWNTO 0) & mobc(6)(7 DOWNTO 0) &
-        mobc(5)(7 DOWNTO 0) & mobc(4)(7 DOWNTO 0) &
-        mobc(3)(7 DOWNTO 0) & mobc(2)(7 DOWNTO 0) &
-        mobc(1)(7 DOWNTO 0) & mobc(0)(7 DOWNTO 0);
-  hitbg<=mobc(7)(8) & mobc(6)(8) & mobc(5)(8) & mobc(4)(8) &
-         mobc(3)(8) & mobc(2)(8) & mobc(1)(8) & mobc(0)(8);
-  hitbo <=mobx(7)(9) & mobx(6)(9) & mobx(5)(9) & mobx(4)(9) &
-         mobx(3)(9) & mobx(2)(9) & mobx(1)(9) & mobx(0)(9);
-  
+    
 END ARCHITECTURE rtl;
 

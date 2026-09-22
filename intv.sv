@@ -176,7 +176,7 @@ wire [12:0] ary = (!ar) ? 12'd561 : 12'd0;
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XX XXXXXXXXXXXXXXXXXXXX XX
+// XX XXXXXXXXXXXXXXXXXXXXXXX
 
 localparam CONF_STR = {
     "Intellivision;;",
@@ -196,6 +196,7 @@ localparam CONF_STR = {
     "OFG,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
     "OB,Video standard,NTSC,PAL;",
     "O1,Swap Joystick,Off,On;",
+    "ON,Pause When OSD is Open,Off,On;",
     "-;",
     "R0,Reset;",
     "J1,Action Up,Action Left,Action Right,Clear,Enter,0,1,2,3,4,5,6,7,8,9;",
@@ -231,7 +232,6 @@ wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
 wire  [7:0] sd_buff_din;
 wire        sd_buff_wr;
-
 
 wire [31:0] joystick_0,joystick_1;
 wire [15:0] joystick_analog_l,joystick_analog_r;
@@ -280,6 +280,7 @@ wire swap    = status[1];
 wire ecs     = status[9];
 wire ivoice  =!status[10];
 wire jlp     =!status[24];
+wire osd_pause = OSD_STATUS && status[23];
 
 wire [3:0] menumask = {!format,format,jlp,en216p};
 
@@ -303,6 +304,7 @@ intv_core intv_core
     .jlp(jlp),
     .mapp(mapp),
     .format(format),
+    .osd_pause(osd_pause),
     .reset(RESET | buttons[1]),
     
     .ecsjlp_set(ecsjlp_set),

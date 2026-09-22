@@ -25,6 +25,7 @@ ENTITY intv_core IS
     jlp              : IN    std_logic;
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
     format           : IN    std_logic;
+    osd_pause       : IN    std_logic;
     reset            : IN    std_logic;
 
     ecsjlp_set       : OUT   std_logic;
@@ -141,6 +142,8 @@ ARCHITECTURE struct OF intv_core IS
   SIGNAL vga_de_u,vga_de_v : std_logic;
   SIGNAL vga_ce_l,vga_ce2,vga_ce3,vga_ce4,vga_ce5  : std_logic;
 
+  SIGNAL hvsync,pause : std_logic;
+
   SIGNAL hwreset_n : std_logic;
   SIGNAL map_reset : std_logic;
   SIGNAL icart_dw : uv16;
@@ -211,7 +214,7 @@ BEGIN
         clkdiv<=clkdiv+1;
       ELSE
         clkdiv<=0;
-        phi_cpup<='1';
+        phi_cpup<= NOT pause; --'1';
       END IF;
       phi_cpu<=phi_cpup;
       
@@ -229,6 +232,10 @@ BEGIN
       ELSE
         phi_ivoice<='0';
         clkdivivoice<=clkdivivoice+1;
+      END IF;
+
+      IF hvsync='1' THEN
+        pause <= osd_pause;
       END IF;
     END IF;
   END PROCESS Clepsydre;
@@ -273,6 +280,7 @@ BEGIN
       ivoice        => ivoice,
       jlp           => jlp,
       clear         => clear,
+      pause         => pause,
       ad            => ad,
       snd_dr        => snd_dr,
       snd_dw        => snd_dw,
@@ -305,6 +313,7 @@ BEGIN
       map_vars      => map_vars,
       ecspage       => ecspage,
       parser        => parser,
+      hvsync        => hvsync,
       vid_r         => vga_r_u,
       vid_g         => vga_g_u,
       vid_b         => vga_b_u,
