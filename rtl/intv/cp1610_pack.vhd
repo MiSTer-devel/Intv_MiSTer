@@ -22,7 +22,7 @@ PACKAGE cp1610_pack IS
   CONSTANT B_ADAR  : uv3 :="100"; -- Addressed data to address register
   CONSTANT B_DTB   : uv3 :="110"; -- Data to bus
   CONSTANT B_NACT  : uv3 :="000"; -- No action
-
+    
   --------------------------------------
   TYPE type_szoc IS RECORD
     s : std_logic; -- Sign

@@ -25,7 +25,7 @@ ENTITY intv_core IS
     jlp              : IN    std_logic;
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
     format           : IN    std_logic;
-    osd_pause       : IN    std_logic;
+    osd_pause        : IN    std_logic;
     reset            : IN    std_logic;
 
     ecsjlp_set       : OUT   std_logic;

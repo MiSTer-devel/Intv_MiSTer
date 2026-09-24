@@ -133,11 +133,11 @@ BEGIN
       WHEN sINIT2 =>
         state<=sFETCH1;
         bdic_i<=B_IAB;
-        nro<="111";
+        nro<="111"; -- PC
         wreg<='1';
         ro<=dr;
         ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
-        nri1<="111";
+        nri1<="111"; -- PC
         
         --------------------------------
       WHEN sWAIT_FETCH =>
@@ -149,15 +149,15 @@ BEGIN
         ELSE
           state<=sFETCH1;
         END IF;
-        nri1<="111";
+        nri1<="111"; -- PC
         
         --------------------------------
       WHEN sFETCH1 =>
-        nri1<="111";
+        nri1<="111"; -- PC
         dw_i<=ri1_r;
         bdic_i<=B_BAR;
         state<=sFETCH2;
-        nro<="111";
+        nro<="111"; -- PC
         ro<=ri1_r+1; -- Increment PC
         wreg<='1';
         
@@ -172,11 +172,11 @@ BEGIN
         op<=dr(9 DOWNTO 0);
         ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         state<=sFETCH4;
-        nri1<="111";
+        nri1<="111"; -- PC
         
       WHEN sFETCH4 =>
         bdic_i<=B_NACT;
-        nri1<="111";
+        nri1<="111"; -- PC
         
         -- Decode
         IF op_r(9 DOWNTO 0)="0000000100" THEN -- JUMP
@@ -186,6 +186,7 @@ BEGIN
             WHEN "0000" => -- Unary
               IF op_r(5 DOWNTO 3)="000" THEN
                 state<=sFETCH1;
+                sdbd<='0';
                 CASE op_r(2 DOWNTO 0) IS
                   WHEN "000" => -- HLT Halt.
                     -- Not handled. Not used on Intellivision
@@ -246,6 +247,7 @@ BEGIN
         ro<=ro_v;
         nro<=op_r(2 DOWNTO 0);
         wreg<='1';
+        sdbd<='0';
         IF busrq='1' THEN
           state<=sWAIT_FETCH;
         ELSIF inter='1' THEN
@@ -268,6 +270,7 @@ BEGIN
         nro<=op_r(2 DOWNTO 0);
         szoc<=szoc_v;
         wreg<='1';
+        sdbd<='0';
         IF op_r(2 DOWNTO 1)="11" THEN
           state<=sEXEC_ALUR3;
         ELSIF busrq='1' THEN
@@ -300,6 +303,7 @@ BEGIN
         nro<='0' & op_r(1 DOWNTO 0);
         szoc<=szoc_v;
         wreg<='1';
+        sdbd<='0';
         IF double_v THEN
           state<=sEXEC_SHIFT3;
         ELSE
@@ -316,11 +320,11 @@ BEGIN
         --------------------------------
       WHEN sDIRECT1 => -- 10 cycles total
         -- MVO MVI ADD SUB CMP
-        nri1<="111";
+        nri1<="111"; -- PC
         bdic_i<=B_BAR;
         dw_i<=ri1_r;
         state<=sDIRECT2;
-        nro<="111";
+        nro<="111"; -- PC
         ro<=ri1_r+1; -- Increment PC
         wreg<='1';
         IF sdbd2_r='1' THEN
@@ -511,12 +515,13 @@ BEGIN
 
         --------------------------------
       WHEN sCBRANCH1 =>
-        nri1<="111";
+        nri1<="111"; -- PC
         dw_i<=ri1_r;
         bdic_i<=B_BAR;
-        nro<="111";
+        nro<="111"; -- PC
         ro<=ri1_r+1; -- Increment PC
         wreg<='1';
+        sdbd<='0';
         state<=sCBRANCH2;
         
       WHEN sCBRANCH2 =>
@@ -537,8 +542,8 @@ BEGIN
         
       WHEN sCBRANCH4 =>
         bdic_i<=B_NACT;
-        nri1<="111";
-        nro<="111";
+        nri1<="111"; -- PC
+        nro<="111"; -- PC
         IF op_r(5)='0' THEN
           ro<=ri1_r + disp_r;
         ELSE
@@ -559,7 +564,7 @@ BEGIN
         
         --------------------------------
       WHEN sJUMP1 =>
-        nri1<="111";
+        nri1<="111"; -- PC
         dw_i<=ri1_r;
         bdic_i<=B_BAR;
         state<=sJUMP2;
@@ -578,14 +583,15 @@ BEGIN
         
       WHEN sJUMP4 =>
         bdic_i<=B_NACT;
-        nro<="111";
-        nri1<="111";
+        nro<="111"; -- PC
+        nri1<="111"; -- PC
         ro<=ri1_r+1; -- Increment PC
         wreg<='1';
+        sdbd<='0';
         state<=sJUMP5;
         
       WHEN sJUMP5 =>
-        nri1<="111";
+        nri1<="111"; -- PC
         dw_i<=ri1_r;
         bdic_i<=B_BAR;
         state<=sJUMP6;
@@ -601,7 +607,7 @@ BEGIN
         ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         op3<=dr(9 DOWNTO 0);
         state<=sJUMP8;
-        nri1<="111";
+        nri1<="111"; -- PC
         nro<='1' & op2_r(9 DOWNTO 8);
         ro<=ri1_r+1;
         IF op_r(9 DOWNTO 8)/="11" THEN
@@ -612,7 +618,8 @@ BEGIN
       WHEN sJUMP8 =>
         bdic_i<=B_NACT;
         wreg<='1';
-        nro<="111";
+        sdbd<='0';
+        nro<="111"; -- PC
         ro<=op2_r(7 DOWNTO 2) & op3_r(9 DOWNTO 0);
         
         IF op2_r(1 DOWNTO 0)="01" THEN
@@ -647,7 +654,7 @@ BEGIN
       WHEN sINTR3 =>
         bdic_i<=B_DW;
         state<=sINTR4;
-        nri1<="111";
+        nri1<="111"; -- PC
         dw_i<=ri1_r;
         
       WHEN sINTR4 =>
@@ -661,7 +668,7 @@ BEGIN
         
       WHEN sINTR6 =>
         bdic_i<=B_IAB;
-        nro<="111";
+        nro<="111"; -- PC
         ASSERT dr(0)/='U' AND dr(0)/='X' REPORT "XXXX" SEVERITY error;
         ro<=dr;
         wreg<='1';
