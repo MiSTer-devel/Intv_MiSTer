@@ -22,6 +22,7 @@ ENTITY intv_core IS
     swap             : IN    std_logic;
     ecs              : IN    std_logic;
     ivoice           : IN    std_logic;
+    voice_gain       : IN    uv2;
     jlp              : IN    std_logic;
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
     format           : IN    std_logic;
@@ -471,6 +472,7 @@ BEGIN
       phi      => phi_ivoice,
       divi     => ivoice_divi,
       sound    => sound_iv,
+      gain     => voice_gain,
       rom_voice_wr => rom_voice_wr,
       rom_aw   => rom_aw,
       rom_dw   => rom_dw,

@@ -39,6 +39,7 @@ ENTITY ivoice IS
     divi     : in  natural;   -- 358 ... 400
     
     sound    : OUT sv16;
+    gain     : IN  uv2; -- 00=*1 01=*2 10=*4 11=*8
     
     --------------------------
     rom_voice_wr : IN  std_logic;
@@ -727,6 +728,8 @@ ARCHITECTURE rtl OF ivoice IS
   SIGNAL pc,ret_pc : uv19;
   SIGNAL ret_val,nexti : boolean;
   SIGNAL reset : std_logic;
+
+  SIGNAL soundr : sv16;
   
   -- Coefficient Quantization Table.
   CONSTANT QTABLE : arr_uint9 := (
@@ -773,11 +776,30 @@ ARCHITECTURE rtl OF ivoice IS
     IF v<-32768 THEN v:=-32768; END IF;
     RETURN v;
   END FUNCTION calc;
+
   FUNCTION sat(i : integer) RETURN integer IS
   BEGIN
     IF i>127 THEN RETURN 127; END IF;
     IF i<-128 THEN  RETURN -128; END IF;
     RETURN i;
+  END FUNCTION;
+
+  FUNCTION amp(i : sv16 ; gain : uv2) RETURN signed IS
+    VARIABLE v : signed(18 DOWNTO 0);
+  BEGIN
+    CASE gain IS
+      WHEN "00"   => v := resize(i,19);
+      WHEN "01"   => v := resize(i & '0',19);
+      WHEN "10"   => v := resize(i & "00",19);
+      WHEN OTHERS => v := resize(i & "000",19);
+    END CASE;
+    IF v(18 DOWNTO 15) = "0000" OR v(18 DOWNTO 15) = "1111" THEN
+      RETURN v(15 DOWNTO 0);
+    ELSIF v(18)='0' THEN
+      RETURN x"7FFF";
+    ELSE
+      RETURN x"8000";
+    END IF;
   END FUNCTION;
 
   SIGNAL qreg : uv7;
@@ -1362,9 +1384,9 @@ BEGIN
           -- Sound output.
           WHEN sSOUND =>
             IF divcpt=320 THEN
-              sound<=to_signed(sat(samp/4)*256,16);
+              soundr<=to_signed(sat(samp/4)*256,16);
               IF silent='1' THEN
-                sound<=x"0000";
+                soundr<=x"0000";
               END IF;
             END IF;
             IF divcpt+1=divi-1 THEN
@@ -1377,6 +1399,8 @@ BEGIN
             
           -----------------------------------------------
         END CASE;
+
+        sound <= amp(soundr,gain);
         
         IF NOT branch_v THEN
           IF NOT fifomode THEN 

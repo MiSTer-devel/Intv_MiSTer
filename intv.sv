@@ -188,7 +188,7 @@ localparam CONF_STR = {
     "O9,ECS,Off,On;",
     "OA,Voice,On,Off;",
     "OO,JLP Acceleration,On,Off;",
-    "d1S0,SAV,JLP RW FLASH:;",
+    "d1S0,SAV,JLP RW FLASH;",
     "O34,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
     "OCE,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
     "d0OH,Vertical Crop,Disabled,216p(5x);",
@@ -281,6 +281,7 @@ wire ecs     = status[9];
 wire ivoice  =!status[10];
 wire jlp     =!status[24];
 wire osd_pause = OSD_STATUS && status[23];
+wire [1:0] voice_gain = 2'd2; // *4
 
 wire [3:0] menumask = {!format,format,jlp,en216p};
 
@@ -301,6 +302,7 @@ intv_core intv_core
     .swap(swap),
     .ecs(ecs),
     .ivoice(ivoice),
+    .voice_gain(voice_gain),
     .jlp(jlp),
     .mapp(mapp),
     .format(format),
