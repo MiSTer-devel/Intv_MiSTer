@@ -233,8 +233,8 @@ wire  [7:0] sd_buff_dout;
 wire  [7:0] sd_buff_din;
 wire        sd_buff_wr;
 
-wire [31:0] joystick_0,joystick_1;
-wire [15:0] joystick_analog_l,joystick_analog_r;
+wire [31:0] joystick_0,joystick_1,joystick_2,joystick_3;
+wire [15:0] joystick_analog_0,joystick_analog_1,joystick_analog_2,joystick_analog_3;
 wire [21:0] gamma_bus;
 wire clk_sys,pll_locked;
 
@@ -244,8 +244,12 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .HPS_BUS(HPS_BUS),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
-    .joystick_l_analog_0(joystick_analog_l),
-    .joystick_r_analog_0(joystick_analog_r),
+    .joystick_2(joystick_2),
+    .joystick_3(joystick_3),
+    .joystick_l_analog_0(joystick_analog_0),
+    .joystick_l_analog_1(joystick_analog_1),
+    .joystick_l_analog_2(joystick_analog_2),
+    .joystick_l_analog_3(joystick_analog_3),  
     .forced_scandoubler(forced_scandoubler),
     .gamma_bus(gamma_bus),
     .buttons(buttons),
@@ -337,8 +341,12 @@ intv_core intv_core
     .vga_hb(CORE_HBLANK),
     .joystick_0(joystick_0),
     .joystick_1(joystick_1),
-    .joystick_analog_0(joystick_analog_l),
-    .joystick_analog_1(joystick_analog_r),
+    .joystick_2(joystick_2),
+    .joystick_3(joystick_3),
+    .joystick_analog_0(joystick_analog_0),
+    .joystick_analog_1(joystick_analog_1),
+    .joystick_analog_2(joystick_analog_2),
+    .joystick_analog_3(joystick_analog_3),
     .ps2_key(ps2_key),
 
     .ioctl_download(ioctl_download),

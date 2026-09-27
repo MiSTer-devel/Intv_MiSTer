@@ -12,6 +12,7 @@ USE IEEE.numeric_std.all;
 
 LIBRARY work;
 USE work.base_pack.ALL;
+USE work.intv_pack.ALL;
 
 ENTITY intv_core IS
   PORT (
@@ -60,8 +61,12 @@ ENTITY intv_core IS
     -- HPS IO
     joystick_0        : IN  unsigned(31 DOWNTO 0);
     joystick_1        : IN  unsigned(31 DOWNTO 0);
+    joystick_2        : IN  unsigned(31 DOWNTO 0);
+    joystick_3        : IN  unsigned(31 DOWNTO 0);
     joystick_analog_0 : IN  unsigned(15 DOWNTO 0);
     joystick_analog_1 : IN  unsigned(15 DOWNTO 0);
+    joystick_analog_2 : IN  unsigned(15 DOWNTO 0);
+    joystick_analog_3 : IN  unsigned(15 DOWNTO 0);
     ps2_key           : IN  std_logic_vector(10 DOWNTO 0);
 
     ioctl_download    : IN  std_logic;
@@ -422,7 +427,7 @@ BEGIN
       clk      => clksys,
       reset_na => cpureset_n);
 
-  -- Second audio ECS
+  -- ECS audio AY-3-8917
   i_snd2: ENTITY work.snd
     PORT MAP (
       ad       => ad,
@@ -493,50 +498,15 @@ BEGIN
   -- IO MAPPING
   
   PROCESS (key_1,key_2,key_3,key_4,key_5,key_6,key_7,key_8,key_9,
-           key_0,key_r,key_w,key_space,key_enter,swap,
-           joystick_0,joystick_1,joystick_analog_0,joystick_analog_1) IS
-    CONSTANT dirtable : arr_uv8(0 TO 15):= (-- NSWE
-      x"00", -- 0000 : no press
-      x"02", -- 0001 : E
-      x"08", -- 0010 : W
-      x"00", -- 0011 : WE = no press
-      x"01", -- 0100 : S
-      x"13", -- 0101 : SE
-      x"19", -- 0110 : SW
-      x"01", -- 0111 : SWE = S
-      x"04", -- 1000 : N
-      x"16", -- 1001 : NE
-      x"1C", -- 1010 : NW
-      x"04", -- 1011 : NWE = N
-      x"00", -- 1100 : NS = no press
-      x"02", -- 1101 : NSE = E
-      x"08", -- 1110 : NSW = W
-      x"00"); -- 1111 : NSWE = no press
-    
-    CONSTANT dir16 : arr_uv8(0 TO 255) := (
-      x"1C",x"1C",x"1C",x"18",x"18",x"08",x"08",x"08",x"08",x"08",x"08",x"09",x"09",x"19",x"19",x"19",
-      x"1C",x"1C",x"1C",x"18",x"18",x"18",x"08",x"08",x"08",x"08",x"09",x"09",x"09",x"19",x"19",x"19",
-      x"1C",x"1C",x"1C",x"1C",x"18",x"18",x"08",x"08",x"08",x"08",x"09",x"09",x"19",x"19",x"19",x"19",
-      x"0C",x"0C",x"1C",x"1C",x"1C",x"18",x"18",x"08",x"08",x"09",x"09",x"19",x"19",x"19",x"11",x"11",
-      x"0C",x"0C",x"0C",x"1C",x"1C",x"00",x"00",x"00",x"00",x"00",x"00",x"19",x"19",x"11",x"11",x"11",
-      x"04",x"0C",x"0C",x"0C",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"11",x"11",x"11",x"01",
-      x"04",x"04",x"04",x"0C",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"11",x"01",x"01",x"01",
-      x"04",x"04",x"04",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"01",x"01",x"01",x"01",
-      x"04",x"04",x"04",x"04",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"01",x"01",x"01",x"01",
-      x"04",x"04",x"04",x"14",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"03",x"01",x"01",x"01",
-      x"04",x"14",x"14",x"14",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"03",x"03",x"03",x"01",
-      x"14",x"14",x"14",x"16",x"16",x"00",x"00",x"00",x"00",x"00",x"00",x"13",x"13",x"03",x"03",x"03",
-      x"14",x"14",x"16",x"16",x"16",x"06",x"06",x"02",x"02",x"12",x"12",x"13",x"13",x"13",x"03",x"03",
-      x"16",x"16",x"16",x"16",x"06",x"06",x"02",x"02",x"02",x"02",x"12",x"12",x"13",x"13",x"13",x"13",
-      x"16",x"16",x"16",x"06",x"06",x"06",x"02",x"02",x"02",x"02",x"12",x"12",x"12",x"13",x"13",x"13",
-      x"16",x"16",x"16",x"06",x"06",x"02",x"02",x"02",x"02",x"02",x"02",x"12",x"12",x"13",x"13",x"13");
-    
-    VARIABLE io_v,io2_v : uv8;
+           key_0,key_r,key_w,key_space,key_enter,swap,ecs,
+           joystick_0,joystick_1,joystick_2,joystick_3,
+           joystick_analog_0,joystick_analog_1,joystick_analog_2,joystick_analog_3) IS
+    VARIABLE io_v,io2_v,io3_v,io4_v : uv8;
     VARIABLE t_v : std_logic_vector(3 DOWNTO 0);
   BEGIN
     -- PORT A
-    io_v:=dirtable(to_integer(unsigned(joystick_0(3 DOWNTO 0)))); -- Direction cross
-    io_v:=io_v OR dir16(to_integer((unsigned(joystick_analog_0( 7 DOWNTO 4)) + x"8") &
+    io_v:=DIRTABLE(to_integer(unsigned(joystick_0(3 DOWNTO 0)))); -- Direction cross
+    io_v:=io_v OR DIR16(to_integer((unsigned(joystick_analog_0( 7 DOWNTO 4)) + x"8") &
                                    (unsigned(joystick_analog_0(15 DOWNTO 12))  + x"8")));
     io_v:=io_v OR ("10100000" AND sext(joystick_0( 4),8)); -- Action UP
     io_v:=io_v OR ("01100000" AND sext(joystick_0( 5),8)); -- Action BL
@@ -556,7 +526,7 @@ BEGIN
 
     t_v:=key_up & key_down & key_left & key_right;
     IF ecs='0' THEN
-      io_v:=io_v OR dirtable(to_integer(unsigned(t_v)));
+      io_v:=io_v OR DIRTABLE(to_integer(unsigned(t_v)));
       io_v:=io_v OR ("10100000" AND sext(key_lctrl,8)); -- Action UP
       io_v:=io_v OR ("10100000" AND sext(key_rctrl,8)); -- Action UP
       io_v:=io_v OR ("01100000" AND sext(key_lshift,8)); -- Action BL
@@ -577,8 +547,8 @@ BEGIN
     
     ---------------------------------
     -- PORT B
-    io2_v:=dirtable(to_integer(unsigned(joystick_1(3 DOWNTO 0))));
-    io2_v:=io2_v OR dir16(to_integer((unsigned(joystick_analog_1( 7 DOWNTO 4)) + x"8") &
+    io2_v:=DIRTABLE(to_integer(unsigned(joystick_1(3 DOWNTO 0))));
+    io2_v:=io2_v OR DIR16(to_integer((unsigned(joystick_analog_1( 7 DOWNTO 4)) + x"8") &
                                      (unsigned(joystick_analog_1(15 DOWNTO 12))  + x"8")));
     io2_v:=io2_v OR ("10100000" AND sext(joystick_1( 4),8)); -- Action UP
     io2_v:=io2_v OR ("01100000" AND sext(joystick_1( 5),8)); -- Action BL
@@ -615,17 +585,64 @@ BEGIN
   --  1  | l     o     8     9     i     k      m      comma
   --  0  | n/a   enter 0     esc   p     scolon period left
   -------+----------------------------------------------------
-    
+  -- ECS Keyboard & Joysticks
   PROCESS(key_0,key_1,key_2,key_3,key_4,key_5,key_6,key_7,key_8,key_9,
           key_a,key_b,key_c,key_d,key_e,key_f,key_g,key_h,key_i,key_j,
           key_k,key_l,key_m,key_n,key_o,key_p,key_q,key_r,key_s,key_t,
           key_u,key_v,key_w,key_x,key_y,key_z,
           key_space,key_colon,key_period,key_comma,
           key_up,key_down,key_right,key_left,
-          key_enter,key_esc,key_lshift,key_rshift,key_lctrl,key_rctrl,pa2_o,pb2_o,pa2_en,pb2_en) IS
+          key_enter,key_esc,key_lshift,key_rshift,key_lctrl,key_rctrl,
+          pa2_o,pb2_o,pa2_en,pb2_en,ecs,
+          joystick_2,joystick_3,joystick_analog_2,joystick_analog_3) IS
     VARIABLE dr : uv8;
+    VARIABLE io3_v, io4_v : uv8;
   BEGIN
-    IF pa2_en='1' AND pb2_en='0' THEN
+    -- ECS Port A
+    io3_v:=DIRTABLE(to_integer(unsigned(joystick_2(3 DOWNTO 0))));
+    io3_v:=io3_v OR DIR16(to_integer((unsigned(joystick_analog_2( 7 DOWNTO 4)) + x"8") &
+                                     (unsigned(joystick_analog_2(15 DOWNTO 12))  + x"8")));
+    io3_v:=io3_v OR ("10100000" AND sext(joystick_2( 4),8));
+    io3_v:=io3_v OR ("01100000" AND sext(joystick_2( 5),8));
+    io3_v:=io3_v OR ("11000000" AND sext(joystick_2( 6),8));
+    io3_v:=io3_v OR ("10001000" AND sext(joystick_2( 7),8));
+    io3_v:=io3_v OR ("00101000" AND sext(joystick_2( 8),8));
+    io3_v:=io3_v OR ("01001000" AND sext(joystick_2( 9),8));
+    io3_v:=io3_v OR ("10000001" AND sext(joystick_2(10),8));
+    io3_v:=io3_v OR ("01000001" AND sext(joystick_2(11),8));
+    io3_v:=io3_v OR ("00100001" AND sext(joystick_2(12),8));
+    io3_v:=io3_v OR ("10000010" AND sext(joystick_2(13),8));
+    io3_v:=io3_v OR ("01000010" AND sext(joystick_2(14),8));
+    io3_v:=io3_v OR ("00100010" AND sext(joystick_2(15),8));
+    io3_v:=io3_v OR ("10000100" AND sext(joystick_2(16),8));
+    io3_v:=io3_v OR ("01000100" AND sext(joystick_2(17),8));
+    io3_v:=io3_v OR ("00100100" AND sext(joystick_2(18),8));
+    
+    -- ECS Port B
+    io4_v:=DIRTABLE(to_integer(unsigned(joystick_3(3 DOWNTO 0))));
+    io4_v:=io4_v OR DIR16(to_integer((unsigned(joystick_analog_3( 7 DOWNTO 4)) + x"8") &
+                                     (unsigned(joystick_analog_3(15 DOWNTO 12))  + x"8")));
+    io4_v:=io4_v OR ("10100000" AND sext(joystick_3( 4),8));
+    io4_v:=io4_v OR ("01100000" AND sext(joystick_3( 5),8));
+    io4_v:=io4_v OR ("11000000" AND sext(joystick_3( 6),8));
+    io4_v:=io4_v OR ("10001000" AND sext(joystick_3( 7),8));
+    io4_v:=io4_v OR ("00101000" AND sext(joystick_3( 8),8));
+    io4_v:=io4_v OR ("01001000" AND sext(joystick_3( 9),8));
+    io4_v:=io4_v OR ("10000001" AND sext(joystick_3(10),8));
+    io4_v:=io4_v OR ("01000001" AND sext(joystick_3(11),8));
+    io4_v:=io4_v OR ("00100001" AND sext(joystick_3(12),8));
+    io4_v:=io4_v OR ("10000010" AND sext(joystick_3(13),8));
+    io4_v:=io4_v OR ("01000010" AND sext(joystick_3(14),8));
+    io4_v:=io4_v OR ("00100010" AND sext(joystick_3(15),8));
+    io4_v:=io4_v OR ("10000100" AND sext(joystick_3(16),8));
+    io4_v:=io4_v OR ("01000100" AND sext(joystick_3(17),8));
+    io4_v:=io4_v OR ("00100100" AND sext(joystick_3(18),8));
+
+    pa2_i<=NOT mux(swap,io3_v,io4_v);
+    pb2_i<=NOT mux(swap,io4_v,io3_v);
+    
+    -- Access keyboard matrix when Port A is an output
+    IF pa2_en='1' THEN
       dr:=x"00";
       dr:=dr OR mux(NOT pa2_o(7),
                     "00000000",x"00");
@@ -644,15 +661,10 @@ BEGIN
       dr:=dr OR mux(NOT pa2_o(0),
                     '0' & key_enter & key_0 & key_esc & key_p & key_colon & key_period & key_left,x"00");
       dr:=NOT dr;
-    ELSIF pa2_en='0' AND pb2_en='1' THEN
-      dr:=x"FF";
-      -- <TODO>
-    ELSE
-      dr:=x"FF";
+      pa2_i<=dr;
+      pb2_i<=dr;
     END IF;
-    pb2_i<=dr;
-    pa2_i<=dr;
-      
+       
   END PROCESS;
   
   ----------------------------------------------------------
