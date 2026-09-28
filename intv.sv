@@ -183,7 +183,7 @@ localparam CONF_STR = {
     "-;",
     "F1,ROMINTBIN,Cartridge;",
     "OM,Format,Raw & Intellicart,CFG mapping;",
-    "d3O58,MAP,Auto,0,1,2,3,4,5,6,7,8,9;",
+    "d3O58,MAP,Auto,0,1,2,3,4,5,6,7,8,9,10;",
     "d2F2,CFG,CFG Mapping;",
     "O9,ECS,Off,On;",
     "OA,Voice,On,Off;",

@@ -90,7 +90,9 @@ PACKAGE intv_pack IS
     (x"D5363B8C",6),                                                 -- Centipede
     (x"13FF363C",7),(x"C047D487",7),(x"5E6A8CD8",7),(x"E806AD91",7), -- Atlantis / Beauty and the Beast / Demon Attack / MicroSurgeon
     (x"C83EEA4C",8),                                                 -- MTE201 Test Cart
-    (x"CE8FC699",9),(x"095638C0",9));                                -- Game Factory / Triple Challenge
+    (x"CE8FC699",9),(x"095638C0",9),                                 -- Game Factory / Triple Challenge
+    (x"A63AA3D8",10)                                                 -- Party Line: Blow Out
+    );
     
   -----------------------------------------------------------------------------
   FUNCTION crc8 (
