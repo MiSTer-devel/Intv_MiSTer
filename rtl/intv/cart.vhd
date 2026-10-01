@@ -86,9 +86,7 @@ ENTITY cart IS
     -----------------------------------
     phi        : IN std_logic;  -- PHI clock enable
     clksys     : IN std_logic; -- 12x Pixel Clock
-    reset      : IN std_logic;
-    cpureset_n : IN std_logic;
-    hwreset_n  : IN std_logic
+    poreset    : IN std_logic
     );
 END ENTITY cart;
 
@@ -875,7 +873,7 @@ BEGIN
         bin_loaded <= '0';
         cfg_loaded <= '0';
       END IF;
-      IF reset='1' THEN
+      IF poreset='1' THEN
         state <= sIDLE;
       END IF;
     END IF;
@@ -1106,7 +1104,7 @@ BEGIN
           END IF;
       END CASE;
 
-      IF hwreset_n='0' THEN
+      IF poreset='1' THEN
         sdram_state <= sDINIT;
       END IF;
     END IF;

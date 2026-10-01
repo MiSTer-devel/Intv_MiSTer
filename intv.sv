@@ -61,7 +61,7 @@ module emu
     output  [1:0] LED_POWER,
     output  [1:0] LED_DISK,
 
-    output  [1:0] BUTTONS,
+    output  [1:0] BUTTONS, // 0=OSD 1=USER
 
     input         CLK_AUDIO, // 24.576 MHz
     output [15:0] AUDIO_L,
@@ -297,11 +297,16 @@ assign status_in = {status[63:25],!jlp_up,status[23:10],ecs_up,status[8:0]};
 wire [7:0] CORE_R,CORE_G,CORE_B;
 wire       CORE_HS,CORE_VS,CORE_DE,CORE_CE;
 wire       CORE_HBLANK,CORE_VBLANK;
-   
+
+wire       poreset;
+
+always @(posedge clk_sys) begin
+	poreset <= RESET | !pll_locked;
+end
+
 intv_core intv_core
 (
     .clksys(clk_sys),
-    .pll_locked(pll_locked),
     .pal(pal),
     .swap(swap),
     .ecs(ecs),
@@ -311,8 +316,8 @@ intv_core intv_core
     .mapp(mapp),
     .format(format),
     .osd_pause(osd_pause),
-    .reset(RESET | buttons[1]),
-    
+    .poreset(poreset),
+    .reset(buttons[1] | status[0]),
     .ecsjlp_set(ecsjlp_set),
     .ecs_up(ecs_up),
     .jlp_up(jlp_up),

@@ -17,7 +17,6 @@ USE work.intv_pack.ALL;
 ENTITY intv_core IS
   PORT (
     clksys           : IN    std_logic;
-    pll_locked       : IN    std_logic;
     
     pal              : IN    std_logic;
     swap             : IN    std_logic;
@@ -28,6 +27,7 @@ ENTITY intv_core IS
     mapp             : IN    std_logic_vector(3 DOWNTO 0);
     format           : IN    std_logic;
     osd_pause        : IN    std_logic;
+    poreset          : IN    std_logic;
     reset            : IN    std_logic;
 
     ecsjlp_set       : OUT   std_logic;
@@ -381,9 +381,7 @@ BEGIN
       jlp_up         => jlp_up,
       phi            => phi_cpu,
       clksys         => clksys,
-      reset          => reset,
-      cpureset_n     => cpureset_n,
-      hwreset_n      => hwreset_n);
+      poreset        => poreset);
 
   -- SDRAM CTRL
   i_sdram : sdram
@@ -769,8 +767,6 @@ BEGIN
   vga_ce <=vga_ce_l;
   
   ----------------------------------------------------------
-  cpureset_n <=NOT reset AND pll_locked AND NOT ioctl_download AND NOT map_reset;
-
-  hwreset_n<=NOT reset AND pll_locked;
+  cpureset_n <= NOT poreset AND NOT reset AND NOT ioctl_download AND NOT map_reset;
   
 END struct;
